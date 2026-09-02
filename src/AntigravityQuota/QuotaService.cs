@@ -12,13 +12,22 @@ using System.Threading.Tasks;
 
 namespace AntigravityQuota
 {
-    public class ModelQuota
+    public class QuotaBucket
     {
-        public string Label { get; set; } = "";
-        public string DisplayLabel { get; set; } = "";
+        public string BucketId { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public string Window { get; set; } = ""; // "5h" or "weekly"
         public double Percentage { get; set; } = 100.0;
         public int ResetSeconds { get; set; } = 0;
         public string ResetTimeStr { get; set; } = "";
+    }
+
+    public class QuotaGroup
+    {
+        public string DisplayName { get; set; } = "";
+        public string Description { get; set; } = "";
+        public QuotaBucket? FiveHourBucket { get; set; }
+        public QuotaBucket? WeeklyBucket { get; set; }
     }
 
     public class QuotaStatus
@@ -28,8 +37,9 @@ namespace AntigravityQuota
         public string UserName { get; set; } = "User";
         public string Email { get; set; } = "";
         public string PlanName { get; set; } = "Pro";
-        public ModelQuota? PrimaryModel { get; set; }
-        public List<ModelQuota> Models { get; set; } = new();
+        public List<QuotaGroup> Groups { get; set; } = new();
+        public QuotaGroup? GeminiGroup => Groups.FirstOrDefault(g => g.DisplayName.Contains("Gemini"));
+        public QuotaGroup? ClaudeGptGroup => Groups.FirstOrDefault(g => g.DisplayName.Contains("Claude") || g.DisplayName.Contains("GPT"));
     }
 
     public class QuotaService
@@ -154,108 +164,108 @@ namespace AntigravityQuota
         {
             try
             {
-                string url = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus";
-                var payload = new { metadata = new { csrf_token = token, ide_name = "antigravity" } };
-                string jsonBody = JsonSerializer.Serialize(payload);
+                string payloadJson = $"{{\"metadata\":{{\"csrf_token\":\"{token}\",\"ide_name\":\"antigravity\"}}}}";
+                
+                // 1. 请求完整的五小时 + 本周配额概览接口 (RetrieveUserQuotaSummary)
+                string quotaUrl = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary";
+                using var quotaReq = new HttpRequestMessage(HttpMethod.Post, quotaUrl);
+                quotaReq.Headers.Add("Connect-Protocol-Version", "1");
+                quotaReq.Headers.Add("x-codeium-csrf-token", token);
+                quotaReq.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-                using var req = new HttpRequestMessage(HttpMethod.Post, url);
-                req.Headers.Add("Connect-Protocol-Version", "1");
-                req.Headers.Add("x-codeium-csrf-token", token);
-                req.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+                using var quotaResp = await _httpClient.SendAsync(quotaReq);
+                if (!quotaResp.IsSuccessStatusCode) return null;
 
-                using var response = await _httpClient.SendAsync(req);
-                if (!response.IsSuccessStatusCode) return null;
-
-                string respJson = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(respJson);
+                string quotaJson = await quotaResp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(quotaJson);
                 var root = doc.RootElement;
 
-                if (!root.TryGetProperty("userStatus", out var userStatus)) return null;
+                if (!root.TryGetProperty("response", out var respObj)) return null;
 
-                string userName = userStatus.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "User" : "User";
-                string email = userStatus.TryGetProperty("email", out var emailProp) ? emailProp.GetString() ?? "" : "";
-                string planName = "Pro";
-                if (userStatus.TryGetProperty("planStatus", out var planStatus) &&
-                    planStatus.TryGetProperty("planInfo", out var planInfo) &&
-                    planInfo.TryGetProperty("planName", out var planNameProp))
-                {
-                    planName = planNameProp.GetString() ?? "Pro";
-                }
-
-                var rawList = new List<ModelQuota>();
                 DateTime nowUtc = DateTime.UtcNow;
+                var groupList = new List<QuotaGroup>();
 
-                if (userStatus.TryGetProperty("cascadeModelConfigData", out var cascadeData) &&
-                    cascadeData.TryGetProperty("clientModelConfigs", out var clientConfigs))
+                if (respObj.TryGetProperty("groups", out var groupsArr))
                 {
-                    foreach (var m in clientConfigs.EnumerateArray())
+                    foreach (var g in groupsArr.EnumerateArray())
                     {
-                        string label = m.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "";
-                        if (string.IsNullOrEmpty(label)) continue;
+                        string gName = g.TryGetProperty("displayName", out var gn) ? gn.GetString() ?? "" : "";
+                        string gDesc = g.TryGetProperty("description", out var gd) ? gd.GetString() ?? "" : "";
 
-                        if (m.TryGetProperty("quotaInfo", out var quotaInfo))
+                        var group = new QuotaGroup
                         {
-                            double fraction = quotaInfo.TryGetProperty("remainingFraction", out var frac) ? frac.GetDouble() : 1.0;
-                            double pct = Math.Round(fraction * 100.0, 1);
-                            string resetTimeStr = quotaInfo.TryGetProperty("resetTime", out var rts) ? rts.GetString() ?? "" : "";
+                            DisplayName = gName,
+                            Description = gDesc
+                        };
 
-                            int resetSecs = 0;
-                            if (!string.IsNullOrEmpty(resetTimeStr))
+                        if (g.TryGetProperty("buckets", out var bucketsArr))
+                        {
+                            foreach (var b in bucketsArr.EnumerateArray())
                             {
-                                if (DateTime.TryParse(resetTimeStr, out var dt))
+                                string bId = b.TryGetProperty("bucketId", out var bid) ? bid.GetString() ?? "" : "";
+                                string bName = b.TryGetProperty("displayName", out var bn) ? bn.GetString() ?? "" : "";
+                                string window = b.TryGetProperty("window", out var win) ? win.GetString() ?? "" : "";
+                                double fraction = b.TryGetProperty("remainingFraction", out var frac) ? frac.GetDouble() : 1.0;
+                                double pct = Math.Round(fraction * 100.0, 1);
+                                string resetTimeStr = b.TryGetProperty("resetTime", out var rts) ? rts.GetString() ?? "" : "";
+
+                                int resetSecs = 0;
+                                if (!string.IsNullOrEmpty(resetTimeStr) && DateTime.TryParse(resetTimeStr, out var dt))
                                 {
                                     resetSecs = Math.Max(0, (int)(dt.ToUniversalTime() - nowUtc).TotalSeconds);
                                 }
+
+                                var bucket = new QuotaBucket
+                                {
+                                    BucketId = bId,
+                                    DisplayName = bName,
+                                    Window = window,
+                                    Percentage = pct,
+                                    ResetSeconds = resetSecs,
+                                    ResetTimeStr = resetTimeStr
+                                };
+
+                                if (window == "5h") group.FiveHourBucket = bucket;
+                                else if (window == "weekly") group.WeeklyBucket = bucket;
                             }
+                        }
 
-                            string displayLabel = label;
-                            if (displayLabel.Contains("3.7 Flash")) displayLabel = "Gemini 3.7 Flash";
-                            else if (displayLabel.Contains("3.1 Pro")) displayLabel = "Gemini 3.1 Pro";
-                            else if (displayLabel.Contains("Claude Sonnet")) displayLabel = "Claude Sonnet 4.6";
-                            else if (displayLabel.Contains("Claude Opus")) displayLabel = "Claude Opus 4.6";
-                            else if (displayLabel.Contains("GPT-OSS")) displayLabel = "GPT-OSS 120B";
-                            else if (displayLabel.Contains("3.6 Flash")) displayLabel = "Gemini 3.6 Flash";
+                        groupList.Add(group);
+                    }
+                }
 
-                            rawList.Add(new ModelQuota
+                // 2. 获取用户基础信息 (GetUserStatus)
+                string userUrl = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus";
+                using var userReq = new HttpRequestMessage(HttpMethod.Post, userUrl);
+                userReq.Headers.Add("Connect-Protocol-Version", "1");
+                userReq.Headers.Add("x-codeium-csrf-token", token);
+                userReq.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+
+                string userName = "User";
+                string email = "";
+                string planName = "Pro";
+
+                try
+                {
+                    using var userResp = await _httpClient.SendAsync(userReq);
+                    if (userResp.IsSuccessStatusCode)
+                    {
+                        string userJson = await userResp.Content.ReadAsStringAsync();
+                        using var uDoc = JsonDocument.Parse(userJson);
+                        if (uDoc.RootElement.TryGetProperty("userStatus", out var uStatus))
+                        {
+                            userName = uStatus.TryGetProperty("name", out var n) ? n.GetString() ?? "User" : "User";
+                            email = uStatus.TryGetProperty("email", out var e) ? e.GetString() ?? "" : "";
+                            if (uStatus.TryGetProperty("planStatus", out var pStatus) &&
+                                pStatus.TryGetProperty("planInfo", out var pInfo) &&
+                                pInfo.TryGetProperty("planName", out var pn))
                             {
-                                Label = label,
-                                DisplayLabel = displayLabel,
-                                Percentage = pct,
-                                ResetSeconds = resetSecs,
-                                ResetTimeStr = resetTimeStr
-                            });
+                                planName = pn.GetString() ?? "Pro";
+                            }
                         }
                     }
                 }
-
-                var distinctModels = new List<ModelQuota>();
-                var seenLabels = new HashSet<string>();
-
-                string[] preferredOrder = new[] { "Gemini 3.7 Flash", "Gemini 3.1 Pro", "Claude Sonnet 4.6", "GPT-OSS 120B", "Claude Opus 4.6", "Gemini 3.6 Flash" };
-                
-                foreach (var pref in preferredOrder)
-                {
-                    var match = rawList.FirstOrDefault(m => m.DisplayLabel == pref && m.Label.Contains("(High)")) 
-                             ?? rawList.FirstOrDefault(m => m.DisplayLabel == pref);
-                    if (match != null && !seenLabels.Contains(match.DisplayLabel))
-                    {
-                        seenLabels.Add(match.DisplayLabel);
-                        distinctModels.Add(match);
-                    }
-                }
-
-                foreach (var m in rawList)
-                {
-                    if (!seenLabels.Contains(m.DisplayLabel))
-                    {
-                        seenLabels.Add(m.DisplayLabel);
-                        distinctModels.Add(m);
-                    }
-                }
-
-                ModelQuota? primary = distinctModels.FirstOrDefault(m => m.DisplayLabel.Contains("3.7 Flash"))
-                                   ?? distinctModels.FirstOrDefault(m => m.DisplayLabel.Contains("3.1 Pro"))
-                                   ?? distinctModels.FirstOrDefault();
+                catch { }
 
                 return new QuotaStatus
                 {
@@ -263,8 +273,7 @@ namespace AntigravityQuota
                     UserName = userName,
                     Email = email,
                     PlanName = planName,
-                    PrimaryModel = primary,
-                    Models = distinctModels
+                    Groups = groupList
                 };
             }
             catch

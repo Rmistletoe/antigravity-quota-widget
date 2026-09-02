@@ -75,7 +75,7 @@ namespace AntigravityQuota
             // 初始屏幕定位 (右下角偏上)
             double screenW = SystemParameters.PrimaryScreenWidth;
             double screenH = SystemParameters.PrimaryScreenHeight;
-            Left = screenW - 290;
+            Left = screenW - 360;
             Top = screenH - 100;
 
             // 初始化系统右下角翡翠绿闪电托盘图标 (System Tray)
@@ -335,104 +335,158 @@ namespace AntigravityQuota
         {
             if (_lastStatus == null || !_lastStatus.Success)
             {
-                PillPctText.Text = "连接中...";
+                Pill5hText.Text = "连接中...";
+                PillWeeklyText.Text = "周: --%";
                 PillStatusDot.Fill = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF5, 0x9E, 0x0B));
                 return;
             }
 
-            var hero = _lastStatus.PrimaryModel;
-            if (hero == null) return;
+            var geminiGroup = _lastStatus.GeminiGroup;
+            var g5h = geminiGroup?.FiveHourBucket;
+            var gWeekly = geminiGroup?.WeeklyBucket;
 
-            var brush = GetStatusBrush(hero.Percentage);
+            if (g5h != null)
+            {
+                var brush = GetStatusBrush(g5h.Percentage);
+                Pill5hText.Text = $"3.7 Flash: {g5h.Percentage:F1}%";
+                PillStatusDot.Fill = brush;
+                PillStatusGlow.Color = brush.Color;
+            }
 
-            // 1. 胶囊渲染
-            string shortLabel = hero.DisplayLabel.Replace("Gemini ", "").Replace(" (High)", "");
-            PillPctText.Text = $"{shortLabel}: {hero.Percentage:F1}%";
-            PillStatusDot.Fill = brush;
-            PillStatusGlow.Color = brush.Color;
+            if (gWeekly != null)
+            {
+                PillWeeklyText.Text = $"周: {gWeekly.Percentage:F1}%";
+            }
 
-            // 2. 鼠标悬停 ToolTip 渲染
+            // 2. 鼠标悬停 ToolTip 渲染 (清晰展示两大模型组的 5小时 与 周限额)
             TipUserText.Text = $"👤 {_lastStatus.UserName} · {_lastStatus.PlanName} 套餐";
 
-            TipModelsContainer.Children.Clear();
-            foreach (var m in _lastStatus.Models.Take(5))
+            TipGroupsContainer.Children.Clear();
+            foreach (var group in _lastStatus.Groups)
             {
-                var mBrush = GetStatusBrush(m.Percentage);
-
-                var row = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
-
-                var lblName = new TextBlock
+                var groupBox = new Border
                 {
-                    Text = m.DisplayLabel,
+                    Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x06, 0x00, 0x00, 0x00)),
+                    BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(8, 6, 8, 6),
+                    Margin = new Thickness(0, 0, 0, 6)
+                };
+
+                var sp = new StackPanel();
+
+                string groupIcon = group.DisplayName.Contains("Gemini") ? "⚡" : "🔮";
+                string groupTitle = group.DisplayName.Contains("Gemini") ? "Gemini 模型组 (Flash / Pro)" : "Claude & GPT 模型组 (Sonnet / Opus / GPT-OSS)";
+
+                var lblGroup = new TextBlock
+                {
+                    Text = $"{groupIcon} {groupTitle}",
                     FontSize = 11,
-                    Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x41, 0x55)),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis
-                };
-                Grid.SetColumn(lblName, 0);
-
-                var pb = new WpfProgressBar
-                {
-                    Height = 4,
-                    Value = m.Percentage,
-                    Maximum = 100,
-                    Foreground = mBrush,
-                    Style = (Style)FindResource("LightProgressBarStyle"),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(4, 0, 4, 0)
-                };
-                Grid.SetColumn(pb, 1);
-
-                var lblVal = new TextBlock
-                {
-                    Text = $"{m.Percentage:F1}%",
-                    FontSize = 10.5,
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = mBrush,
-                    HorizontalAlignment = WpfHorizontalAlignment.Right,
-                    VerticalAlignment = VerticalAlignment.Center
+                    Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1E, 0x29, 0x3B)),
+                    Margin = new Thickness(0, 0, 0, 4)
                 };
-                Grid.SetColumn(lblVal, 2);
+                sp.Children.Add(lblGroup);
 
-                row.Children.Add(lblName);
-                row.Children.Add(pb);
-                row.Children.Add(lblVal);
+                // 5小时限额行
+                if (group.FiveHourBucket != null)
+                {
+                    var b = group.FiveHourBucket;
+                    sp.Children.Add(CreateBucketRow("5小时滚动", b.Percentage, b.ResetSeconds, is5h: true));
+                }
 
-                TipModelsContainer.Children.Add(row);
+                // 周限额行
+                if (group.WeeklyBucket != null)
+                {
+                    var b = group.WeeklyBucket;
+                    sp.Children.Add(CreateBucketRow("本周额度", b.Percentage, b.ResetSeconds, is5h: false));
+                }
+
+                groupBox.Child = sp;
+                TipGroupsContainer.Children.Add(groupBox);
             }
 
             // 更新托盘提示文字
-            if (_notifyIcon != null)
+            if (_notifyIcon != null && g5h != null && gWeekly != null)
             {
-                _notifyIcon.Text = $"Antigravity: {shortLabel} {hero.Percentage:F1}%";
+                _notifyIcon.Text = $"Antigravity: 5h {g5h.Percentage:F1}% | 周 {gWeekly.Percentage:F1}%";
             }
 
             UpdateCountdownDisplay();
         }
 
+        private Grid CreateBucketRow(string label, double pct, int resetSecs, bool is5h)
+        {
+            var brush = GetStatusBrush(pct);
+
+            var row = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(45) });
+
+            var lbl = new TextBlock
+            {
+                Text = label,
+                FontSize = 10.5,
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x64, 0x74, 0x8B)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(lbl, 0);
+
+            var pb = new WpfProgressBar
+            {
+                Height = 4,
+                Value = pct,
+                Maximum = 100,
+                Foreground = brush,
+                Style = (Style)FindResource("LightProgressBarStyle"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 4, 0)
+            };
+            Grid.SetColumn(pb, 1);
+
+            var val = new TextBlock
+            {
+                Text = $"{pct:F1}%",
+                FontSize = 10.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = brush,
+                HorizontalAlignment = WpfHorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(val, 2);
+
+            row.Children.Add(lbl);
+            row.Children.Add(pb);
+            row.Children.Add(val);
+
+            return row;
+        }
+
         private void UpdateCountdownDisplay()
         {
             if (_lastStatus == null || !_lastStatus.Success) return;
-            var hero = _lastStatus.PrimaryModel;
-            if (hero == null) return;
+            var geminiGroup = _lastStatus.GeminiGroup;
+            var g5h = geminiGroup?.FiveHourBucket;
+            if (g5h == null) return;
 
             int elapsed = (int)(DateTime.UtcNow - _lastFetchTime).TotalSeconds;
-            int remSecs = Math.Max(0, hero.ResetSeconds - elapsed);
+            int remSecs = Math.Max(0, g5h.ResetSeconds - elapsed);
 
             string formatted = FormatTime(remSecs);
             PillCountdownText.Text = formatted;
-            TipCountdownText.Text = $"{formatted} 后";
         }
 
         private string FormatTime(int secs)
         {
             if (secs <= 0) return "已重置";
-            int h = secs / 3600;
+            int d = secs / 86400;
+            int h = (secs % 86400) / 3600;
             int m = (secs % 3600) / 60;
             int s = secs % 60;
+
+            if (d > 0) return $"{d}天{h:D2}时";
             return h > 0 ? $"{h:D2}:{m:D2}:{s:D2}" : $"{m:D2}:{s:D2}";
         }
     }

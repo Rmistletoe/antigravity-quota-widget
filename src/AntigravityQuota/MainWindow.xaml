@@ -46,7 +46,7 @@
                                 BorderBrush="#E2E8F0"
                                 BorderThickness="1"
                                 Padding="14,12"
-                                Width="260">
+                                Width="280">
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.15" Color="#000000"/>
                             </Border.Effect>
@@ -89,20 +89,17 @@
                         <TextBlock x:Name="TipUserText" Text="👤 加载中..." FontSize="11" Foreground="#64748B" FontWeight="Medium" Margin="0,0,0,8"/>
                         <Rectangle Height="1" Fill="#F1F5F9" Margin="0,0,0,8"/>
 
-                        <!-- 各模型详情列表 -->
-                        <StackPanel x:Name="TipModelsContainer" Margin="0,0,0,8"/>
+                        <!-- 各模型组配额详情 (5小时 + 周限额) -->
+                        <StackPanel x:Name="TipGroupsContainer" Margin="0,0,0,6"/>
 
-                        <!-- 倒计时提示 -->
+                        <!-- 底部提示 -->
                         <Rectangle Height="1" Fill="#F1F5F9" Margin="0,0,0,6"/>
-                        <Grid>
-                            <TextBlock Text="5小时 Sprint 重置:" FontSize="10" Foreground="#94A3B8"/>
-                            <TextBlock x:Name="TipCountdownText" Text="--:--:-- 后" FontSize="10" Foreground="#475569" FontWeight="SemiBold" HorizontalAlignment="Right"/>
-                        </Grid>
+                        <TextBlock Text="💡 模型组内共享 5小时 与 周额度池" FontSize="10" Foreground="#94A3B8" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </ToolTip>
             </Border.ToolTip>
 
-            <!-- 胶囊内容 -->
+            <!-- 胶囊内容 (同时展示 5小时 核心模型配额 与 本周配额) -->
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- 呼吸发光灯 -->
                 <Ellipse x:Name="PillStatusDot" Width="8" Height="8" Fill="#10B981" Margin="0,0,7,0">
@@ -111,13 +108,20 @@
                     </Ellipse.Effect>
                 </Ellipse>
 
-                <!-- 模型百分比 (3.7 Flash) -->
-                <TextBlock x:Name="PillPctText" Text="3.7 Flash: --%" FontWeight="SemiBold" FontSize="12.5" Foreground="#0F172A" VerticalAlignment="Center"/>
+                <!-- 5小时核心限额 (3.7 Flash) -->
+                <TextBlock x:Name="Pill5hText" Text="3.7 Flash: --%" FontWeight="SemiBold" FontSize="12.5" Foreground="#0F172A" VerticalAlignment="Center"/>
 
                 <!-- 分隔条 -->
                 <Rectangle Width="1" Height="11" Fill="#CBD5E1" Margin="7,0,7,0"/>
 
-                <!-- 倒计时 -->
+                <!-- 周限额 -->
+                <TextBlock Text="📅" FontSize="10" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="PillWeeklyText" Text="周: --%" FontWeight="Medium" FontSize="12" Foreground="#0369A1" VerticalAlignment="Center"/>
+
+                <!-- 分隔条 -->
+                <Rectangle Width="1" Height="11" Fill="#CBD5E1" Margin="7,0,7,0"/>
+
+                <!-- 5小时倒计时 -->
                 <TextBlock Text="⏳" FontSize="11" Margin="0,0,3,0" VerticalAlignment="Center"/>
                 <TextBlock x:Name="PillCountdownText" Text="--:--:--" FontSize="11.5" Foreground="#475569" FontWeight="Medium" VerticalAlignment="Center"/>
 
