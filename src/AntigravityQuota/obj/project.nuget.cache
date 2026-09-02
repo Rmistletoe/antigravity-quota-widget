@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "pzvB1Tzsri8=",
+  "success": true,
+  "projectFilePath": "D:\\学习\\Gemini\\antigravity-quota-widget\\src\\AntigravityQuota\\AntigravityQuota.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\11412\\.nuget\\packages\\system.management\\10.0.11\\system.management.10.0.11.nupkg.sha512"
+  ],
+  "logs": []
+}
