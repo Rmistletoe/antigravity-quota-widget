@@ -29,6 +29,7 @@ namespace AntigravityQuota
 
         // Win32 常量与结构体
         private const int GWL_EXSTYLE = -20;
+        private const int GWL_HWNDPARENT = -8;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_TOPMOST = 0x00000008;
 
@@ -57,10 +58,26 @@ namespace AntigravityQuota
         }
 
         [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowLongPtr")]
+        private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll", SetLastError = true, EntryPoint = "SetWindowLong")]
+        private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        private static IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
+        {
+            if (IntPtr.Size == 8)
+                return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
+            return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
+        }
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -83,7 +100,11 @@ namespace AntigravityQuota
 
             // 1 秒轻量平滑倒计时定时器 (0 CPU 开销)
             _clockTimer.Interval = TimeSpan.FromSeconds(1);
-            _clockTimer.Tick += (s, e) => UpdateCountdownDisplay();
+            _clockTimer.Tick += (s, e) =>
+            {
+                UpdateCountdownDisplay();
+                if (_isTopmost) EnsureTopmostLevel();
+            };
             _clockTimer.Start();
 
             // 启动后台异步轮询 (30秒一次)
@@ -100,15 +121,40 @@ namespace AntigravityQuota
                 // 1. 设置 ToolWindow + Topmost 样式
                 int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_TOPMOST);
+
+                // 2. 将宿主所有者绑定到任务栏 Shell_TrayWnd（彻底解决放在任务栏区域被任务栏覆盖隐藏的问题）
+                IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
+                if (taskbarHwnd != IntPtr.Zero)
+                {
+                    try
+                    {
+                        SetWindowLongPtr(hwnd, GWL_HWNDPARENT, taskbarHwnd);
+                    }
+                    catch { }
+                }
+
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
-                // 2. 注册单例唤醒全局消息
+                // 3. 注册单例唤醒全局消息
                 _wakeupMessageId = RegisterWindowMessage(App.WAKEUP_MSG);
 
-                // 3. 安装底层 WndProc 钩子：拦截 Windows "显示桌面" (Win+D / 点击任务栏最右侧) 的强制隐藏指令
+                // 4. 安装底层 WndProc 钩子：拦截 Windows "显示桌面" (Win+D / 点击任务栏最右侧) 的强制隐藏指令
                 var source = HwndSource.FromHwnd(hwnd);
                 source?.AddHook(WndProc);
             }
+        }
+
+        private void EnsureTopmostLevel()
+        {
+            try
+            {
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(hwnd, _isTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
+            catch { }
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -254,6 +300,7 @@ namespace AntigravityQuota
             try
             {
                 DragMove();
+                if (_isTopmost) EnsureTopmostLevel();
             }
             catch { }
         }
