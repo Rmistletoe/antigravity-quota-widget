@@ -1,6 +1,8 @@
 # Build and Output
-src_wpf/bin/
-src_wpf/obj/
+bin/
+obj/
+**/bin/
+**/obj/
 *.user
 *.suo
 *.userosscache
