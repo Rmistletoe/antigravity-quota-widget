@@ -3,6 +3,8 @@ bin/
 obj/
 **/bin/
 **/obj/
+releases/
+*.zip
 *.user
 *.suo
 *.userosscache
@@ -18,4 +20,3 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-*.zip
