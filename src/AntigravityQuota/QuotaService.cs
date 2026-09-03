@@ -30,6 +30,19 @@ namespace AntigravityQuota
         public QuotaBucket? WeeklyBucket { get; set; }
     }
 
+    public class ModelConfigItem
+    {
+        public string ModelId { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string TagTitle { get; set; } = "";
+        public string TagDescription { get; set; } = "";
+        public string Category { get; set; } = "Gemini";
+        public double Version { get; set; } = 0.0;
+        public bool IsLatest { get; set; } = false;
+        public bool IsRecommended { get; set; }
+        public bool SupportsImages { get; set; }
+    }
+
     public class QuotaStatus
     {
         public bool Success { get; set; }
@@ -38,6 +51,7 @@ namespace AntigravityQuota
         public string Email { get; set; } = "";
         public string PlanName { get; set; } = "Pro";
         public List<QuotaGroup> Groups { get; set; } = new();
+        public List<ModelConfigItem> AvailableModels { get; set; } = new();
         public QuotaGroup? GeminiGroup => Groups.FirstOrDefault(g => g.DisplayName.Contains("Gemini"));
         public QuotaGroup? ClaudeGptGroup => Groups.FirstOrDefault(g => g.DisplayName.Contains("Claude") || g.DisplayName.Contains("GPT"));
     }
@@ -267,19 +281,104 @@ namespace AntigravityQuota
                 }
                 catch { }
 
+                // 3. 获取可用模型列表 (GetCascadeModelConfigData)
+                var modelList = new List<ModelConfigItem>();
+                try
+                {
+                    string modelUrl = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetCascadeModelConfigData";
+                    using var modelReq = new HttpRequestMessage(HttpMethod.Post, modelUrl);
+                    modelReq.Headers.Add("Connect-Protocol-Version", "1");
+                    modelReq.Headers.Add("x-codeium-csrf-token", token);
+                    modelReq.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+
+                    using var modelResp = await _httpClient.SendAsync(modelReq);
+                    if (modelResp.IsSuccessStatusCode)
+                    {
+                        string modelJson = await modelResp.Content.ReadAsStringAsync();
+                        using var mDoc = JsonDocument.Parse(modelJson);
+                        if (mDoc.RootElement.TryGetProperty("clientModelConfigs", out var configsArr))
+                        {
+                            foreach (var item in configsArr.EnumerateArray())
+                            {
+                                string label = item.TryGetProperty("label", out var lbl) ? lbl.GetString() ?? "" : "";
+                                string modelId = item.TryGetProperty("modelId", out var mid) ? mid.GetString() ?? "" : "";
+                                string tagTitle = item.TryGetProperty("tagTitle", out var tt) ? tt.GetString() ?? "" : "";
+                                string tagDesc = item.TryGetProperty("tagDescription", out var td) ? td.GetString() ?? "" : "";
+                                bool isRec = item.TryGetProperty("isRecommended", out var ir) && ir.GetBoolean();
+                                bool supImg = item.TryGetProperty("supportsImages", out var si) && si.GetBoolean();
+
+                                if (string.IsNullOrEmpty(label)) continue;
+
+                                string cat = (modelId.Contains("claude", StringComparison.OrdinalIgnoreCase) ||
+                                              modelId.Contains("gpt", StringComparison.OrdinalIgnoreCase) ||
+                                              label.Contains("Claude", StringComparison.OrdinalIgnoreCase) ||
+                                              label.Contains("GPT", StringComparison.OrdinalIgnoreCase))
+                                              ? "Claude & GPT" : "Gemini";
+
+                                double ver = ParseModelVersion(label, modelId);
+
+                                modelList.Add(new ModelConfigItem
+                                {
+                                    ModelId = modelId,
+                                    Label = label,
+                                    TagTitle = tagTitle,
+                                    TagDescription = tagDesc,
+                                    Category = cat,
+                                    Version = ver,
+                                    IsRecommended = isRec,
+                                    SupportsImages = supImg
+                                });
+                            }
+
+                            // 动态识别当前各系列下的最新版本模型 (例如 Gemini 最高为 3.8，Claude 最高为 4.6)
+                            double maxGeminiVer = modelList.Where(m => m.Category == "Gemini").Select(m => m.Version).DefaultIfEmpty(0.0).Max();
+                            double maxClaudeVer = modelList.Where(m => m.Category != "Gemini").Select(m => m.Version).DefaultIfEmpty(0.0).Max();
+
+                            foreach (var m in modelList)
+                            {
+                                if (m.Category == "Gemini" && m.Version > 0 && Math.Abs(m.Version - maxGeminiVer) < 0.001)
+                                {
+                                    m.IsLatest = true;
+                                }
+                                else if (m.Category != "Gemini" && m.Version > 0 && Math.Abs(m.Version - maxClaudeVer) < 0.001)
+                                {
+                                    m.IsLatest = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
                 return new QuotaStatus
                 {
                     Success = true,
                     UserName = userName,
                     Email = email,
                     PlanName = planName,
-                    Groups = groupList
+                    Groups = groupList,
+                    AvailableModels = modelList
                 };
             }
             catch
             {
                 return null;
             }
+        }
+
+        private static double ParseModelVersion(string label, string modelId)
+        {
+            var m = Regex.Match(label, @"\b(\d+\.\d+)\b");
+            if (m.Success && double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v))
+            {
+                return v;
+            }
+            m = Regex.Match(modelId, @"\b(\d+\.\d+)\b");
+            if (m.Success && double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v))
+            {
+                return v;
+            }
+            return 0.0;
         }
     }
 }

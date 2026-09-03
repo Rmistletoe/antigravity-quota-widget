@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-set VERSION=1.0.0
+set VERSION=1.1.0
 
 echo ========================================================
 echo   Antigravity Quota Widget 一键发布打包 (v%VERSION%)

@@ -8,8 +8,7 @@
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        SizeToContent="WidthAndHeight"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        SizeToContent="WidthAndHeight">
 
     <Window.Resources>
         <!-- 进度条样式 -->
@@ -24,6 +23,61 @@
                                     <Border CornerRadius="3" Background="{TemplateBinding Foreground}"/>
                                 </Decorator>
                             </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 极简轻量细滚动条样式 -->
+        <Style x:Key="CleanScrollThumb" TargetType="{x:Type Thumb}">
+            <Setter Property="OverridesDefaultStyle" Value="true"/>
+            <Setter Property="IsTabStop" Value="false"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border CornerRadius="3" Background="#CBD5E1" Margin="1,0,1,0"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CleanScrollBar" TargetType="{x:Type ScrollBar}">
+            <Setter Property="OverridesDefaultStyle" Value="true"/>
+            <Setter Property="Width" Value="5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource CleanScrollThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CleanScrollViewer" TargetType="{x:Type ScrollViewer}">
+            <Setter Property="OverridesDefaultStyle" Value="true"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter Grid.Column="0"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Column="1"
+                                       Style="{StaticResource CleanScrollBar}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -61,83 +115,184 @@
     <!-- 右键菜单 -->
     <Window.ContextMenu>
         <ContextMenu>
+            <MenuItem Header="📋 展开/收起详情板" Click="MenuToggleDetails_Click"/>
             <MenuItem Header="🔄 立即刷新数据" Click="MenuRefresh_Click"/>
-            <MenuItem x:Name="MenuTopmostItem" Header="📌 始终置顶" IsChecked="True" Click="MenuTopmost_Click"/>
+            <Separator/>
+            <!-- 常驻核心模型选择 -->
+            <MenuItem Header="🎯 常驻核心模型">
+                <MenuItem x:Name="MenuDisplayGemini" Header="⚡ Gemini 3.8 Flash (默认)" IsCheckable="True" Click="MenuDisplayMode_Click" Tag="Gemini"/>
+                <MenuItem x:Name="MenuDisplayClaude" Header="🔮 Claude Sonnet 4.6" IsCheckable="True" Click="MenuDisplayMode_Click" Tag="Claude"/>
+            </MenuItem>
+            <!-- 胶囊透明度调节 -->
+            <MenuItem Header="👻 胶囊透明度">
+                <MenuItem x:Name="MenuOpacity100" Header="100% (不透明)" IsCheckable="True" Click="MenuOpacity_Click" Tag="1.0"/>
+                <MenuItem x:Name="MenuOpacity85" Header="85% (微透)" IsCheckable="True" Click="MenuOpacity_Click" Tag="0.85"/>
+                <MenuItem x:Name="MenuOpacity70" Header="70% (半透推荐)" IsCheckable="True" Click="MenuOpacity_Click" Tag="0.70"/>
+                <MenuItem x:Name="MenuOpacity50" Header="50% (极淡)" IsCheckable="True" Click="MenuOpacity_Click" Tag="0.50"/>
+            </MenuItem>
+            <Separator/>
+            <MenuItem x:Name="MenuRecoveryNotifyItem" Header="🔔 满血重置气泡提醒" IsCheckable="True" IsChecked="True" Click="MenuRecoveryNotify_Click"/>
+            <MenuItem x:Name="MenuAutoStartItem" Header="🚀 随系统开机启动" IsCheckable="True" Click="MenuAutoStart_Click"/>
+            <MenuItem x:Name="MenuTopmostItem" Header="📌 始终置顶" IsCheckable="True" IsChecked="True" Click="MenuTopmost_Click"/>
             <Separator/>
             <MenuItem Header="❌ 退出程序" Click="MenuExit_Click"/>
         </ContextMenu>
     </Window.ContextMenu>
 
     <Grid Margin="10">
-        <!-- 纯粹常驻浅色胶囊悬浮球 (Pill) -->
-        <Border x:Name="PillBorder"
-                CornerRadius="18"
-                Background="#F2FFFFFF"
-                BorderBrush="#D0CBD5E1"
-                BorderThickness="1"
-                Padding="12,5"
-                Cursor="SizeAll">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.12" Color="#0F172A"/>
-            </Border.Effect>
+        <StackPanel x:Name="MainContainer" Orientation="Vertical">
+            <!-- 纯粹常驻浅色胶囊悬浮球 (Pill) -->
+            <Border x:Name="PillBorder"
+                    CornerRadius="18"
+                    Background="#F2FFFFFF"
+                    BorderBrush="#D0CBD5E1"
+                    BorderThickness="1"
+                    Padding="12,5"
+                    Cursor="Hand"
+                    MouseLeftButtonDown="PillBorder_MouseLeftButtonDown">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.12" Color="#0F172A"/>
+                </Border.Effect>
 
-            <!-- 鼠标悬停详情卡片 -->
-            <Border.ToolTip>
-                <ToolTip Style="{StaticResource LightToolTipStyle}">
-                    <StackPanel>
-                        <!-- 账号信息 -->
-                        <TextBlock x:Name="TipUserText" Text="👤 加载中..." FontSize="11" Foreground="#64748B" FontWeight="Medium" Margin="0,0,0,8"/>
-                        <Rectangle Height="1" Fill="#F1F5F9" Margin="0,0,0,8"/>
+                <!-- 鼠标悬停详情卡片 -->
+                <Border.ToolTip>
+                    <ToolTip x:Name="PillToolTipControl" Style="{StaticResource LightToolTipStyle}">
+                        <StackPanel>
+                            <!-- 账号信息 -->
+                            <TextBlock x:Name="TipUserText" Text="👤 加载中..." FontSize="11" Foreground="#64748B" FontWeight="Medium" Margin="0,0,0,8"/>
+                            <Rectangle Height="1" Fill="#F1F5F9" Margin="0,0,0,8"/>
 
-                        <!-- 各模型组配额详情 (5小时 + 周限额) -->
-                        <StackPanel x:Name="TipGroupsContainer" Margin="0,0,0,6"/>
+                            <!-- 各模型组配额详情 (5小时 + 周限额) -->
+                            <StackPanel x:Name="TipGroupsContainer" Margin="0,0,0,6"/>
 
-                        <!-- 底部提示 -->
-                        <Rectangle Height="1" Fill="#F1F5F9" Margin="0,0,0,6"/>
-                        <TextBlock Text="💡 模型组内共享 5小时 与 周额度池" FontSize="10" Foreground="#94A3B8" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </ToolTip>
-            </Border.ToolTip>
+                            <!-- 底部提示 -->
+                            <Rectangle Height="1" Fill="#F1F5F9" Margin="0,0,0,6"/>
+                            <TextBlock Text="💡 单击展开完整模型清单 · 再次点击收起" FontSize="10" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </ToolTip>
+                </Border.ToolTip>
 
-            <!-- 胶囊内容 (同时展示 5小时 核心模型配额 与 本周配额) -->
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- 呼吸发光灯 -->
-                <Ellipse x:Name="PillStatusDot" Width="8" Height="8" Fill="#10B981" Margin="0,0,7,0">
-                    <Ellipse.Effect>
-                        <DropShadowEffect x:Name="PillStatusGlow" BlurRadius="6" ShadowDepth="0" Color="#10B981" Opacity="0.8"/>
-                    </Ellipse.Effect>
-                </Ellipse>
+                <!-- 胶囊内容 (同时展示 5小时 核心模型配额 与 本周配额) -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 呼吸发光灯 -->
+                    <Ellipse x:Name="PillStatusDot" Width="8" Height="8" Fill="#10B981" Margin="0,0,7,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect x:Name="PillStatusGlow" BlurRadius="6" ShadowDepth="0" Color="#10B981" Opacity="0.8"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
 
-                <!-- 5小时核心限额 (3.7 Flash) -->
-                <TextBlock x:Name="Pill5hText" Text="3.7 Flash: --%" FontWeight="SemiBold" FontSize="12.5" Foreground="#0F172A" VerticalAlignment="Center"/>
+                    <!-- 5小时核心限额 (3.8 Flash) -->
+                    <TextBlock x:Name="Pill5hText" Text="3.8 Flash: --%" FontWeight="SemiBold" FontSize="12.5" Foreground="#0F172A" VerticalAlignment="Center"/>
 
-                <!-- 分隔条 -->
-                <Rectangle Width="1" Height="11" Fill="#CBD5E1" Margin="7,0,7,0"/>
+                    <!-- 分隔条 -->
+                    <Rectangle Width="1" Height="11" Fill="#CBD5E1" Margin="7,0,7,0"/>
 
-                <!-- 周限额 -->
-                <TextBlock Text="📅" FontSize="10" Margin="0,0,3,0" VerticalAlignment="Center"/>
-                <TextBlock x:Name="PillWeeklyText" Text="周: --%" FontWeight="Medium" FontSize="12" Foreground="#0369A1" VerticalAlignment="Center"/>
+                    <!-- 周限额 -->
+                    <TextBlock Text="📅" FontSize="10" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PillWeeklyText" Text="周: --%" FontWeight="Medium" FontSize="12" Foreground="#0369A1" VerticalAlignment="Center"/>
 
-                <!-- 分隔条 -->
-                <Rectangle Width="1" Height="11" Fill="#CBD5E1" Margin="7,0,7,0"/>
+                    <!-- 分隔条 -->
+                    <Rectangle Width="1" Height="11" Fill="#CBD5E1" Margin="7,0,7,0"/>
 
-                <!-- 5小时倒计时 -->
-                <TextBlock Text="⏳" FontSize="11" Margin="0,0,3,0" VerticalAlignment="Center"/>
-                <TextBlock x:Name="PillCountdownText" Text="--:--:--" FontSize="11.5" Foreground="#475569" FontWeight="Medium" VerticalAlignment="Center"/>
+                    <!-- 5小时倒计时 -->
+                    <TextBlock Text="⏳" FontSize="11" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PillCountdownText" Text="--:--:--" FontSize="11.5" Foreground="#475569" FontWeight="Medium" VerticalAlignment="Center"/>
 
-                <!-- 快速关闭按钮 (✕) -->
-                <Border x:Name="BtnClosePill"
-                        Width="16" Height="16" CornerRadius="8"
-                        Background="#0D000000"
-                        Margin="7,0,0,0"
-                        Cursor="Hand"
-                        ToolTip="关闭悬浮球"
-                        MouseLeftButtonDown="BtnClose_MouseLeftButtonDown"
-                        MouseEnter="BtnClose_MouseEnter"
-                        MouseLeave="BtnClose_MouseLeave">
-                    <TextBlock x:Name="ClosePillText" Text="✕" FontSize="9" FontWeight="Bold" Foreground="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
-                </Border>
-            </StackPanel>
-        </Border>
+                    <!-- 展开指示小图标 ▼ / ▲ -->
+                    <TextBlock x:Name="PillChevron" Text="▾" FontSize="11" FontWeight="Bold" Foreground="#94A3B8" Margin="5,0,2,0" VerticalAlignment="Center" ToolTip="单击展开/收起详情面板"/>
+
+                    <!-- 快速关闭按钮 (✕) -->
+                    <Border x:Name="BtnClosePill"
+                            Width="16" Height="16" CornerRadius="8"
+                            Background="#0D000000"
+                            Margin="5,0,0,0"
+                            Cursor="Hand"
+                            ToolTip="关闭悬浮球"
+                            MouseLeftButtonDown="BtnClose_MouseLeftButtonDown"
+                            MouseEnter="BtnClose_MouseEnter"
+                            MouseLeave="BtnClose_MouseLeave">
+                        <TextBlock x:Name="ClosePillText" Text="✕" FontSize="9" FontWeight="Bold" Foreground="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 点击展开的「模型与状态详情板」 (默认折叠，再次点击胶囊收起) -->
+            <Border x:Name="DetailsCardBorder"
+                    Visibility="Collapsed"
+                    Margin="0,8,0,0"
+                    Width="336"
+                    CornerRadius="14"
+                    Background="#FDFEFF"
+                    BorderBrush="#CBD5E1"
+                    BorderThickness="1"
+                    Padding="14,12">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="22" ShadowDepth="8" Opacity="0.16" Color="#0F172A"/>
+                </Border.Effect>
+
+                <StackPanel>
+                    <!-- 头部栏：用户信息 + 操作按钮 -->
+                    <Grid MouseLeftButtonDown="DetailsHeader_MouseLeftButtonDown" Cursor="SizeAll">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 用户与套餐 -->
+                        <TextBlock x:Name="DetailsUserText" Text="👤 加载中..." FontSize="12" FontWeight="SemiBold" Foreground="#1E293B" VerticalAlignment="Center"/>
+
+                        <!-- 右侧按钮组 -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- 刷新按钮 -->
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#0A000000" Cursor="Hand" ToolTip="刷新配额与模型" MouseLeftButtonDown="DetailsRefresh_Click" Margin="0,0,6,0">
+                                <TextBlock Text="🔄" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- 收起按钮 -->
+                            <Border Width="20" Height="20" CornerRadius="10" Background="#0A000000" Cursor="Hand" ToolTip="收起详情板" MouseLeftButtonDown="DetailsCollapse_Click">
+                                <TextBlock Text="✕" FontSize="9" FontWeight="Bold" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <Rectangle Height="1" Fill="#F1F5F9" Margin="0,8,0,8"/>
+
+                    <!-- 配额状态概览 -->
+                    <TextBlock Text="📊 配额健康概览" FontSize="11" FontWeight="SemiBold" Foreground="#475569" Margin="0,0,0,4"/>
+                    <StackPanel x:Name="DetailsQuotaContainer" Margin="0,0,0,4"/>
+
+                    <Rectangle Height="1" Fill="#F1F5F9" Margin="0,6,0,8"/>
+
+                    <!-- 可用模型一览区 -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🤖 可用模型清单" FontSize="11" FontWeight="SemiBold" Foreground="#475569"/>
+                            <Border x:Name="ModelCountBadge" Background="#E0F2FE" CornerRadius="4" Padding="4,1" Margin="6,0,0,0">
+                                <TextBlock x:Name="ModelCountText" Text="0" FontSize="9.5" FontWeight="Bold" Foreground="#0369A1"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="点击复制" FontSize="10" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- 复制成功的轻量提示 Toast -->
+                    <Border x:Name="ToastBorder" Background="#DCFCE7" CornerRadius="6" Padding="6,3" Margin="0,0,0,4" Visibility="Collapsed">
+                        <TextBlock x:Name="DetailsToastText" Text="" FontSize="10.5" FontWeight="Medium" Foreground="#15803D" HorizontalAlignment="Center"/>
+                    </Border>
+
+                    <!-- 可用模型列表滚动视图 -->
+                    <ScrollViewer Style="{StaticResource CleanScrollViewer}" MaxHeight="220" VerticalScrollBarVisibility="Auto" Margin="0,2,0,0">
+                        <StackPanel x:Name="DetailsModelsContainer"/>
+                    </ScrollViewer>
+
+                    <Rectangle Height="1" Fill="#F1F5F9" Margin="0,8,0,6"/>
+
+                    <!-- 底部收起提示 -->
+                    <TextBlock Text="💡 再次点击悬浮球可随时收起面板" FontSize="10" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
     </Grid>
 </Window>
