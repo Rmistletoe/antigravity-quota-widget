@@ -75,9 +75,6 @@ antigravity-quota-widget/
 │   └── web/
 │       └── index.html              # 面板前端（纯静态，改它不用重编译）
 │
-├── docs/
-│   └── TOKEN_USAGE_PLAN.md         # Token 用量统计方案（含 RPC 协议实测记录）
-│
 ├── scripts/
 │   ├── build.bat                   # 一键编译
 │   └── stop.bat                    # 停止服务
