@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Management;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -58,104 +56,24 @@ namespace AntigravityQuota
 
     public class QuotaService
     {
-        private static readonly HttpClient _httpClient;
-        private static int _cachedPid = 0;
-        private static string _cachedToken = "";
-        private static int _cachedPort = 0;
-
-        static QuotaService()
-        {
-            var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-            };
-            _httpClient = new HttpClient(handler)
-            {
-                Timeout = TimeSpan.FromSeconds(3)
-            };
-        }
-
-        [DllImport("iphlpapi.dll", SetLastError = true)]
-        private static extern uint GetExtendedTcpTable(IntPtr pTcpTable, ref int pdwSize, bool bOrder, int ulAf, int tableClass, uint reserved);
-
-        private static List<int> GetListeningPortsForPid(int targetPid)
-        {
-            var ports = new List<int>();
-            int bufferSize = 0;
-            GetExtendedTcpTable(IntPtr.Zero, ref bufferSize, true, 2, 5, 0);
-
-            IntPtr pTable = Marshal.AllocHGlobal(bufferSize);
-            try
-            {
-                if (GetExtendedTcpTable(pTable, ref bufferSize, true, 2, 5, 0) == 0)
-                {
-                    int numEntries = Marshal.ReadInt32(pTable);
-                    IntPtr rowPtr = IntPtr.Add(pTable, 4);
-
-                    for (int i = 0; i < numEntries; i++)
-                    {
-                        int state = Marshal.ReadInt32(rowPtr, 0);
-                        int localPortRaw = Marshal.ReadInt32(rowPtr, 8);
-                        int owningPid = Marshal.ReadInt32(rowPtr, 20);
-
-                        if (state == 2 && owningPid == targetPid)
-                        {
-                            int port = ((localPortRaw & 0xFF) << 8) | ((localPortRaw >> 8) & 0xFF);
-                            if (!ports.Contains(port)) ports.Add(port);
-                        }
-                        rowPtr = IntPtr.Add(rowPtr, 24);
-                    }
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(pTable);
-            }
-            return ports;
-        }
-
-        private static bool FindProcessAndToken(out int pid, out string token)
-        {
-            pid = 0;
-            token = "";
-            try
-            {
-                using var searcher = new ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name LIKE '%language_server.exe%'");
-                using var results = searcher.Get();
-
-                foreach (ManagementObject obj in results)
-                {
-                    pid = Convert.ToInt32(obj["ProcessId"]);
-                    string cmdline = obj["CommandLine"]?.ToString() ?? "";
-                    var m = Regex.Match(cmdline, @"--csrf_token\s+([a-f0-9\-]+)", RegexOptions.IgnoreCase);
-                    if (m.Success)
-                    {
-                        token = m.Groups[1].Value;
-                        return true;
-                    }
-                }
-            }
-            catch { }
-            return false;
-        }
+        // 进程发现、端口枚举与 Http 客户端统一由 RpcDiscovery 提供（与 TokenUsageService 共用）
+        private static HttpClient HttpClient => RpcDiscovery.Http;
 
         public async Task<QuotaStatus> FetchQuotaAsync()
         {
-            if (_cachedPid > 0 && !string.IsNullOrEmpty(_cachedToken) && _cachedPort > 0)
+            if (RpcDiscovery.TryGetCachedEndpoint(out int cachedPort, out string cachedToken))
             {
-                var fastRes = await TryRequestAsync(_cachedPort, _cachedToken);
+                var fastRes = await TryRequestAsync(cachedPort, cachedToken);
                 if (fastRes != null) return fastRes;
+                RpcDiscovery.Invalidate();
             }
 
-            if (!FindProcessAndToken(out int pid, out string token))
+            if (!RpcDiscovery.TryFindProcess(out int pid, out string token))
             {
                 return new QuotaStatus { Success = false, Error = "未检测到 Antigravity 运行中" };
             }
 
-            _cachedPid = pid;
-            _cachedToken = token;
-
-            var ports = GetListeningPortsForPid(pid);
+            var ports = RpcDiscovery.GetListeningPortsForPid(pid);
             if (ports.Count == 0)
             {
                 return new QuotaStatus { Success = false, Error = "未能获取本地 RPC 监听端口" };
@@ -166,7 +84,7 @@ namespace AntigravityQuota
                 var res = await TryRequestAsync(port, token);
                 if (res != null)
                 {
-                    _cachedPort = port;
+                    RpcDiscovery.CacheEndpoint(pid, port, token);
                     return res;
                 }
             }
@@ -181,13 +99,13 @@ namespace AntigravityQuota
                 string payloadJson = $"{{\"metadata\":{{\"csrf_token\":\"{token}\",\"ide_name\":\"antigravity\"}}}}";
                 
                 // 1. 请求完整的五小时 + 本周配额概览接口 (RetrieveUserQuotaSummary)
-                string quotaUrl = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary";
+                string quotaUrl = RpcDiscovery.BuildUrl(port, "RetrieveUserQuotaSummary");
                 using var quotaReq = new HttpRequestMessage(HttpMethod.Post, quotaUrl);
                 quotaReq.Headers.Add("Connect-Protocol-Version", "1");
                 quotaReq.Headers.Add("x-codeium-csrf-token", token);
                 quotaReq.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-                using var quotaResp = await _httpClient.SendAsync(quotaReq);
+                using var quotaResp = await HttpClient.SendAsync(quotaReq);
                 if (!quotaResp.IsSuccessStatusCode) return null;
 
                 string quotaJson = await quotaResp.Content.ReadAsStringAsync();
@@ -249,7 +167,7 @@ namespace AntigravityQuota
                 }
 
                 // 2. 获取用户基础信息 (GetUserStatus)
-                string userUrl = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus";
+                string userUrl = RpcDiscovery.BuildUrl(port, "GetUserStatus");
                 using var userReq = new HttpRequestMessage(HttpMethod.Post, userUrl);
                 userReq.Headers.Add("Connect-Protocol-Version", "1");
                 userReq.Headers.Add("x-codeium-csrf-token", token);
@@ -261,7 +179,7 @@ namespace AntigravityQuota
 
                 try
                 {
-                    using var userResp = await _httpClient.SendAsync(userReq);
+                    using var userResp = await HttpClient.SendAsync(userReq);
                     if (userResp.IsSuccessStatusCode)
                     {
                         string userJson = await userResp.Content.ReadAsStringAsync();
@@ -285,13 +203,13 @@ namespace AntigravityQuota
                 var modelList = new List<ModelConfigItem>();
                 try
                 {
-                    string modelUrl = $"https://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetCascadeModelConfigData";
+                    string modelUrl = RpcDiscovery.BuildUrl(port, "GetCascadeModelConfigData");
                     using var modelReq = new HttpRequestMessage(HttpMethod.Post, modelUrl);
                     modelReq.Headers.Add("Connect-Protocol-Version", "1");
                     modelReq.Headers.Add("x-codeium-csrf-token", token);
                     modelReq.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-                    using var modelResp = await _httpClient.SendAsync(modelReq);
+                    using var modelResp = await HttpClient.SendAsync(modelReq);
                     if (modelResp.IsSuccessStatusCode)
                     {
                         string modelJson = await modelResp.Content.ReadAsStringAsync();

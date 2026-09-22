@@ -1,0 +1,11 @@
+# 批处理脚本必须保持 CRLF 行尾，否则 cmd.exe 解析 if / for 等复合语句可能出错
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做行尾转换，也不参与文本 diff
+*.exe binary
+*.dll binary
+*.pdb binary
+*.zip binary
+*.png binary
+*.ico binary

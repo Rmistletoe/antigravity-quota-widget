@@ -34,7 +34,8 @@ namespace AntigravityQuota
                     string exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
                     if (!string.IsNullOrEmpty(exePath))
                     {
-                        key.SetValue(AppName, $"\"{exePath}\"");
+                        // 开机自启走静默模式：只采集数据，不自动弹浏览器打扰
+                        key.SetValue(AppName, $"\"{exePath}\" --no-browser");
                     }
                 }
                 else

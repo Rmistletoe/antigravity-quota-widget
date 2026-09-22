@@ -6,12 +6,16 @@ namespace AntigravityQuota
 {
     public class AppConfig
     {
-        public double WindowLeft { get; set; } = -1;
-        public double WindowTop { get; set; } = -1;
-        public string MainDisplayMode { get; set; } = "Gemini"; // "Gemini" | "Claude"
-        public double Opacity { get; set; } = 1.0;
-        public bool AutoStart { get; set; } = false;
-        public bool RecoveryNotifyEnabled { get; set; } = true;
+        // v2.0 起已无 GUI，原窗口位置/透明度/托盘等配置项一并移除。
+
+        /// <summary>账本滚动保留月数</summary>
+        public int UsageRetentionMonths { get; set; } = 3;
+
+        /// <summary>用量扫描间隔（秒），最低 30 秒</summary>
+        public int UsageScanIntervalSec { get; set; } = 60;
+
+        /// <summary>是否已完成首次全量回填；置回 false 可在下次启动重建账本</summary>
+        public bool UsageBackfillCompleted { get; set; } = false;
     }
 
     public static class ConfigManager

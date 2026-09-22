@@ -1,20 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- WinExe：无控制台窗口。因此启动脚本可以直接拉起进程，不需要额外的 .vbs 隐藏窗口 -->
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
-    <Product>Antigravity Quota Widget</Product>
+    <RootNamespace>AntigravityQuota</RootNamespace>
+    <AssemblyName>AntigravityQuota</AssemblyName>
+    <Version>2.0.2</Version>
+    <AssemblyVersion>2.0.2.0</AssemblyVersion>
+    <FileVersion>2.0.2.0</FileVersion>
+    <Product>Antigravity Usage Panel</Product>
+    <Description>Antigravity 配额与 Token 用量本地面板（无 GUI，浏览器查看）</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 前端页面：复制到输出目录，改 HTML 无需重新编译 -->
+    <Content Include="web\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

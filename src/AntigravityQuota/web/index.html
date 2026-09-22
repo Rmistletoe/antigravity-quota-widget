@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antigravity 用量面板</title>
+<style>
+  :root{
+    --bg:#F1F5F9; --card:#FFFFFF; --border:#E2E8F0; --border-soft:#F1F5F9;
+    --txt:#0F172A; --txt2:#64748B; --txt3:#94A3B8;
+    --teal:#10B981; --blue:#0369A1; --purple:#7C3AED; --amber:#F59E0B; --red:#EF4444;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:"Segoe UI","Microsoft YaHei",-apple-system,sans-serif;font-size:13px}
+  .wrap{max-width:1320px;margin:0 auto;padding:18px 20px 30px}
+
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.2px}
+  .who{color:var(--txt2);font-size:12.5px}
+  .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+    background:#fff;border:1px solid var(--border);color:var(--txt2);font-size:11.5px;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex:none}
+  .dot.off{background:var(--amber)}
+  .dot.err{background:var(--red)}
+  button{font:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--border);
+    background:#fff;color:var(--txt);cursor:pointer}
+  button:hover{background:#F8FAFC;border-color:#CBD5E1}
+  button:disabled{opacity:.55;cursor:default}
+  .linkbtn{display:inline-block;font-size:12px;padding:5px 12px;border-radius:8px;
+    border:1px solid var(--border);background:#fff;color:var(--txt);text-decoration:none}
+  .linkbtn:hover{background:#F8FAFC;border-color:#CBD5E1}
+
+  .statusbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    background:#fff;border:1px solid var(--border);border-radius:10px;padding:7px 12px;
+    color:var(--txt2);font-size:11.5px;margin-bottom:14px}
+  .statusbar .sep{color:#E2E8F0}
+  #errBox{display:none;background:#FEF2F2;border-color:#FECACA;color:#B91C1C}
+
+  .grid{display:grid;gap:14px}
+  .kpi{grid-template-columns:repeat(3,1fr);margin-top:14px}
+  @media(max-width:860px){.kpi{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+  .card h2{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--txt2);letter-spacing:.3px;
+    display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .card h2 .sub{font-weight:400;color:var(--txt3);font-size:11px}
+
+  .big{font-size:26px;font-weight:600;line-height:1.1;margin-bottom:2px;font-variant-numeric:tabular-nums}
+  .big small{font-size:12px;color:var(--txt3);font-weight:400;margin-left:4px}
+  .rows{margin-top:10px;display:grid;gap:3px}
+  .row{display:flex;justify-content:space-between;font-size:12px}
+  .row .k{color:var(--txt2)}
+  .row .v{font-variant-numeric:tabular-nums;font-weight:500}
+  .row .v.dim{font-weight:400;color:var(--txt2)}
+
+  .split{grid-template-columns:minmax(0,2fr) minmax(0,1fr);margin-top:14px}
+  @media(max-width:1000px){.split{grid-template-columns:1fr}}
+  .chart{width:100%;height:300px}
+
+  .tabs{display:flex;gap:6px;margin-bottom:10px}
+  .tab{padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;
+    color:var(--txt2);cursor:pointer;font-size:12px}
+  .tab.on{background:#E0F2FE;border-color:#BAE6FD;color:var(--blue);font-weight:600}
+
+  /* 卡片标题栏：标题与切换按钮同一行 */
+  .cardhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .cardhead>h2{margin:0}
+  .cardhead .tabs{margin-bottom:0}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:right;font-weight:500;color:var(--txt3);font-size:11.5px;padding:6px 8px;
+    border-bottom:1px solid var(--border);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--border-soft);
+    font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  td.name{font-variant-numeric:normal;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar{height:5px;border-radius:3px;background:#E2E8F0;overflow:hidden;margin-top:4px}
+  .bar>i{display:block;height:100%;background:var(--purple);border-radius:3px}
+
+  .quota{grid-template-columns:repeat(2,1fr);margin-top:0}
+  @media(max-width:860px){.quota{grid-template-columns:1fr}}
+  .qrow{margin-top:9px}
+  .qrow .top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+  .qrow .top .pct{font-weight:600;font-variant-numeric:tabular-nums}
+  .qtrack{height:6px;border-radius:3px;background:#E2E8F0;overflow:hidden}
+  .qtrack>i{display:block;height:100%;border-radius:3px}
+  .empty{padding:26px 6px;text-align:center;color:var(--txt3);font-size:12.5px}
+  footer{margin-top:16px;color:var(--txt3);font-size:11.5px;text-align:center;line-height:1.9}
+  code{background:#E2E8F0;border-radius:4px;padding:1px 5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Antigravity 用量面板</h1>
+    <span class="who" id="who">连接中…</span>
+    <span class="spacer"></span>
+    <span class="pill"><span class="dot" id="connDot"></span><span id="connText">连接中</span></span>
+    <span class="pill" id="rangePill">—</span>
+    <button id="btnRefresh">立即刷新</button>
+    <a class="linkbtn" href="/api/export.csv">导出 CSV</a>
+  </header>
+
+  <div class="statusbar">
+    <span>配额刷新：<b id="stQuota">—</b></span>
+    <span class="sep">|</span>
+    <span>用量扫描：<b id="stScan">—</b></span>
+    <span class="sep">|</span>
+    <span>自动刷新倒计时 <b id="stTick">—</b>s</span>
+    <span class="spacer"></span>
+    <span id="stMode">—</span>
+  </div>
+
+  <div class="statusbar" id="errBox"><b>⚠</b><span id="errText"></span></div>
+
+  <div class="grid quota" id="quota"></div>
+
+  <div class="grid kpi" id="kpi"></div>
+
+  <div class="grid split">
+    <div class="card">
+      <h2><span>每日用量趋势（总 Token）</span><span class="sub">滚轮/拖动可缩放</span></h2>
+      <div class="chart" id="trend"></div>
+    </div>
+    <div class="card">
+      <div class="cardhead">
+        <h2>分模型占比</h2>
+        <div class="tabs" id="tabs">
+          <span class="tab" data-r="day">今日</span>
+          <span class="tab" data-r="week">本周</span>
+          <span class="tab on" data-r="month">本月</span>
+        </div>
+      </div>
+      <div class="chart" id="donut"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2><span>分模型明细</span><span class="sub" id="tableRange">本月</span></h2>
+    <table>
+      <thead><tr>
+        <th>模型</th><th>输入</th><th>输出</th><th>其中思考</th><th>缓存读取</th><th>调用次数</th>
+      </tr></thead>
+      <tbody id="modelBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+    </table>
+  </div>
+
+  <footer id="foot">
+    数据来自本地 Antigravity LanguageServer 的 RPC 接口，账本存放于 <code>%APPDATA%\AntigravityQuota\usage\</code>，
+    按月滚动保留 3 个月。命令行：<code>stop.bat</code> 停止 / <code>open.bat</code> 重新打开本页。
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var REFRESH_SEC = 10;
+  var state = { data: null, range: "month", tick: REFRESH_SEC, trendChart: null, donutChart: null };
+  var C = { teal: "#10B981", blue: "#378ADD", purple: "#7C3AED", amber: "#F59E0B", red: "#EF4444" };
+  var PALETTE = ["#7C3AED", "#378ADD", "#10B981", "#F59E0B", "#EC4899", "#14B8A6", "#8B5CF6", "#94A3B8"];
+
+  function el(id) { return document.getElementById(id); }
+  function fmt(v) {
+    v = Number(v) || 0;
+    if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2) + "B";
+    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + "M";
+    if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + "K";
+    return String(v);
+  }
+  function num(v) { return (Number(v) || 0).toLocaleString("en-US"); }
+  function pctColor(p) { return p >= 50 ? C.teal : (p >= 20 ? C.amber : C.red); }
+  function rangeText() { return state.range === "day" ? "今日" : (state.range === "week" ? "本周" : "本月"); }
+
+  // ---------- 渲染 ----------
+
+  function renderKpi(u) {
+    var defs = [["day", "今日"], ["week", "本周"], ["month", "本月"]];
+    el("kpi").innerHTML = defs.map(function (d) {
+      var t = u[d[0]] || {};
+      var rows = [
+        ["输入", fmt(t.input)],
+        ["输出", fmt(t.output) + "（思考 " + fmt(t.thinking) + "）"],
+        ["缓存读取", fmt(t.cache)],
+        ["调用次数", num(t.calls) + " 次"]
+      ];
+      return '<div class="card"><h2><span>' + d[1] + '总 Token</span><span class="sub">输入 + 输出 + 缓存</span></h2>'
+        + '<div class="big">' + fmt(t.total) + '<small>tokens</small></div>'
+        + '<div class="rows">' + rows.map(function (r) {
+            return '<div class="row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>';
+          }).join("") + '</div></div>';
+    }).join("");
+  }
+
+  function fillDates(daily) {
+    if (!daily || !daily.length) return [];
+    var map = {}, out = [];
+    daily.forEach(function (d) { map[d.date] = d; });
+    var start = new Date(daily[0].date + "T00:00:00");
+    var end = new Date(); end.setHours(0, 0, 0, 0);
+    for (var d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      var key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+              + "-" + String(d.getDate()).padStart(2, "0");
+      out.push(map[key] || { date: key, input: 0, output: 0, cache: 0 });
+    }
+    return out;
+  }
+
+  // 图表实例必须复用。注意：只有第一次创建时才清空容器 ——
+  // 若每次渲染都 innerHTML="" 会把 ECharts 自己插入的 canvas 删掉，
+  // 而实例还在，于是第二次刷新后图就"消失"了。
+  function acquireChart(box, instanceName) {
+    if (state[instanceName]) return state[instanceName];
+    box.innerHTML = "";
+    state[instanceName] = echarts.init(box, null, { renderer: "canvas" });
+    return state[instanceName];
+  }
+
+  function dropChart(box, instanceName, message) {
+    if (state[instanceName]) {
+      try { state[instanceName].dispose(); } catch (e) {}
+      state[instanceName] = null;
+    }
+    box.innerHTML = '<div class="empty">' + message + "</div>";
+  }
+
+  function renderTrend(daily) {
+    var box = el("trend"), series = fillDates(daily);
+    if (!series.length) { dropChart(box, "trendChart", "暂无用量数据"); return; }
+    if (typeof echarts === "undefined") { dropChart(box, "trendChart", "图表库未加载（需要联网加载 CDN）。下发明细表数据不受影响。"); return; }
+
+    var chart = acquireChart(box, "trendChart");
+    chart.setOption({
+      grid: { left: 58, right: 16, top: 26, bottom: 36 },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" },
+        valueFormatter: function (v) { return num(v) + " tokens"; } },
+      legend: { data: ["输入", "输出", "缓存读取"], right: 0, top: 0, itemWidth: 9, itemHeight: 9,
+        textStyle: { fontSize: 11, color: "#64748B" } },
+      xAxis: { type: "category", data: series.map(function (d) { return d.date.slice(5); }),
+        axisLine: { lineStyle: { color: "#E2E8F0" } }, axisLabel: { color: "#94A3B8", fontSize: 10.5 } },
+      yAxis: { type: "value", splitLine: { lineStyle: { color: "#F1F5F9" } },
+        axisLabel: { color: "#94A3B8", fontSize: 10.5, formatter: function (v) { return fmt(v); } } },
+      dataZoom: series.length > 32
+        ? [{ type: "inside" }, { type: "slider", height: 14, bottom: 6,
+            borderColor: "#E2E8F0", fillerColor: "rgba(55,138,221,.12)" }]
+        : [],
+      series: [
+        { name: "输入", type: "bar", stack: "t", barMaxWidth: 22, itemStyle: { color: C.blue },
+          data: series.map(function (d) { return d.input; }) },
+        { name: "输出", type: "bar", stack: "t", barMaxWidth: 22, itemStyle: { color: C.teal },
+          data: series.map(function (d) { return d.output; }) },
+        { name: "缓存读取", type: "bar", stack: "t", barMaxWidth: 22,
+          itemStyle: { color: "#C4B5FD", borderRadius: [3, 3, 0, 0] },
+          data: series.map(function (d) { return d.cache; }) }
+      ]
+    }, true);
+  }
+
+  function currentModels() {
+    var u = state.data && state.data.usage;
+    return (u && u.models && u.models[state.range]) || [];
+  }
+
+  function renderDonut() {
+    var box = el("donut"), list = currentModels();
+    if (!list.length) { dropChart(box, "donutChart", "该区间暂无用量"); return; }
+    if (typeof echarts === "undefined") { dropChart(box, "donutChart", "图表库未加载"); return; }
+
+    var chart = acquireChart(box, "donutChart");
+    chart.setOption({
+      tooltip: { trigger: "item",
+        formatter: function (p) { return p.name + "<br>" + num(p.value) + " tokens (" + p.percent + "%)"; } },
+      legend: { type: "scroll", orient: "vertical", right: 0, top: "middle", itemWidth: 9, itemHeight: 9,
+        textStyle: { fontSize: 11, color: "#64748B" },
+        formatter: function (n) { return n.length > 26 ? n.slice(0, 25) + "…" : n; } },
+      series: [{
+        type: "pie", radius: ["46%", "68%"], center: ["34%", "50%"],
+        itemStyle: { borderColor: "#fff", borderWidth: 2 }, label: { show: false },
+        data: list.map(function (m, i) {
+          return { name: m.label, value: m.total, itemStyle: { color: PALETTE[i % PALETTE.length] } };
+        })
+      }]
+    }, true);
+  }
+
+  function renderTable() {
+    var list = currentModels(), body = el("modelBody");
+    if (!list.length) { body.innerHTML = '<tr><td colspan="6" class="empty">该区间暂无用量</td></tr>'; return; }
+    var max = list[0].total || 1;
+    body.innerHTML = list.map(function (m) {
+      return "<tr>"
+        + '<td class="name" title="' + m.label + '">' + m.label
+        + '<div class="bar"><i style="width:' + Math.max(2, m.total / max * 100) + '%"></i></div></td>'
+        + "<td>" + fmt(m.input) + "</td>"
+        + "<td>" + fmt(m.output) + "</td>"
+        + '<td style="color:var(--txt2)">' + fmt(m.thinking) + "</td>"
+        + '<td style="color:var(--txt2)">' + fmt(m.cache) + "</td>"
+        + "<td>" + num(m.calls) + "</td></tr>";
+    }).join("");
+  }
+
+  function renderQuota(groups) {
+    if (!groups || !groups.length) { el("quota").innerHTML = ""; return; }
+    el("quota").innerHTML = groups.map(function (g) {
+      var rows = (g.buckets || []).map(function (b) {
+        var c = pctColor(b.pct);
+        return '<div class="qrow"><div class="top"><span style="color:var(--txt2)">'
+          + b.label + " · " + b.window + '</span><span class="pct" style="color:' + c + '">'
+          + b.pct.toFixed(1) + "%</span></div>"
+          + '<div class="qtrack"><i style="width:' + b.pct + "%;background:" + c + '"></i></div></div>';
+      }).join("");
+      return '<div class="card"><h2>' + g.name + "</h2>" + rows + "</div>";
+    }).join("");
+  }
+
+  function renderAll() {
+    var d = state.data;
+    if (!d) return;
+
+    el("tableRange").textContent = rangeText();
+    el("who").textContent = d.user ? (d.user + " · " + (d.plan || "") + " 套餐") : "未连接";
+    var dot = el("connDot");
+    dot.className = "dot" + (d.connected ? "" : (d.error ? " err" : " off"));
+    el("connText").textContent = d.connected ? "已连接" : "未连接";
+    el("stQuota").textContent = d.quotaFetchedAt || "—";
+    el("stScan").textContent = d.scanAt || "—";
+    el("stMode").textContent = d.backfillCompleted ? "增量采集" : "首次全量回填中…";
+
+    if (d.error) { el("errBox").style.display = "flex"; el("errText").textContent = d.error; }
+    else { el("errBox").style.display = "none"; }
+
+    if (d.usage && d.usage.month) {
+      var since = d.earliest ? d.earliest.slice(5) : "—";
+      el("rangePill").textContent = "自 " + since + " 起 · " + num(d.recordCount) + " 条 · 保留 " + d.retentionMonths + " 个月";
+      renderKpi(d.usage);
+      renderTrend(d.usage.daily || []);
+    } else {
+      el("rangePill").textContent = "暂无数据";
+      el("kpi").innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty">'
+        + "尚无用量记录。采集需要 Antigravity 处于运行状态 —— 启动后首次会自动回填历史，稍等片刻。</div></div>";
+      el("trend").innerHTML = "";
+    }
+    renderDonut();
+    renderTable();
+    renderQuota(d.groups);
+
+    el("foot").innerHTML = "最后更新 " + d.ts
+      + " · 账本保留最近 " + d.retentionMonths + " 个月 · 页面每 " + REFRESH_SEC + " 秒自动刷新";
+  }
+
+  // ---------- 数据获取 ----------
+
+  var loading = false;
+  function load() {
+    if (loading) return;
+    loading = true;
+    fetch("/api/data", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { state.data = d; state.tick = REFRESH_SEC; renderAll(); })
+      .catch(function () {
+        el("connDot").className = "dot err";
+        el("connText").textContent = "服务无响应";
+      })
+      .finally(function () { loading = false; });
+  }
+
+  el("tabs").addEventListener("click", function (e) {
+    var t = e.target.closest(".tab");
+    if (!t) return;
+    state.range = t.dataset.r;
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (x) {
+      x.classList.toggle("on", x === t);
+    });
+    el("tableRange").textContent = rangeText();
+    renderDonut();
+    renderTable();
+  });
+
+  el("btnRefresh").addEventListener("click", function () {
+    var btn = el("btnRefresh");
+    btn.disabled = true;
+    btn.textContent = "刷新中…";
+    fetch("/api/refresh").catch(function () {}).then(function () {
+      setTimeout(function () {
+        load();
+        btn.disabled = false;
+        btn.textContent = "立即刷新";
+      }, 1200);
+    });
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) load();
+  });
+
+  window.addEventListener("resize", function () {
+    if (state.trendChart) state.trendChart.resize();
+    if (state.donutChart) state.donutChart.resize();
+  });
+
+  // 倒计时 + 自动刷新
+  setInterval(function () {
+    state.tick = Math.max(0, state.tick - 1);
+    el("stTick").textContent = state.tick;
+    if (state.tick <= 0) load();
+  }, 1000);
+
+  load();
+})();
+</script>
+</body>
+</html>

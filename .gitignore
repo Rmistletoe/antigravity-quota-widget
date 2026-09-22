@@ -1,21 +1,35 @@
-# Build and Output
+# ============ 编译产物 ============
+# 注意：bin/ 曾经被跟踪过，现已移出版本控制（git rm --cached）。
+# 如果你希望仓库里直接提供可执行文件，删掉下面两行 bin/ 再重新 add 即可。
 bin/
-obj/
 **/bin/
+obj/
 **/obj/
+
+# ============ 发布包 ============
 releases/
 *.zip
+
+# ============ IDE / 编辑器 ============
+.vs/
+.idea/
+.vscode/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
 
-# Visual Studio / Rider
-.vs/
-.idea/
-.vscode/
+# ============ 运行期数据（正常都在 %APPDATA%\AntigravityQuota\，
+#              这里只是防御性忽略，避免被误拷进仓库） ============
+*.log
+runtime.json
+modelmap.json
+usage/*.jsonl
 
-# Windows
+# ============ AI 助手工作记忆（非项目产物） ============
+.workbuddy/
+
+# ============ Windows ============
 Thumbs.db
 ehthumbs.db
 Desktop.ini
