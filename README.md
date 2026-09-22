@@ -37,16 +37,20 @@
 ### 2. 停止
 双击 **`scripts\stop.bat`**。
 
-### 3. 脚本一览（只有三个）
+### 3. 脚本一览
 
 | 脚本 | 作用 |
 |---|---|
 | `start.bat` | 关闭旧实例 → 启动服务 → 浏览器自动打开面板 |
 | `scripts\build.bat` | 一键编译（输出到 `bin\`） |
 | `scripts\stop.bat` | 停止服务 |
+| `scripts\package.bat` | 编译并打包出发布 zip 到 `releases\`（发布用） |
 
 > 程序是**无控制台窗口**类型（WinExe），启动后不会留任何黑框。
 > 想再打开一次面板，直接再双击 `start.bat` 即可。
+>
+> **运行环境要求**：Windows 10 / 11 + [.NET 10 运行时](https://dotnet.microsoft.com/download)（框架依赖构建，
+> 只用到基础运行时 `Microsoft.NETCore.App`，**不需要 Desktop Runtime**）。
 
 ### 4. 命令行参数
 
@@ -77,6 +81,7 @@ antigravity-quota-widget/
 │
 ├── scripts/
 │   ├── build.bat                   # 一键编译
+│   ├── package.bat                 # 编译 + 打包发布 zip
 │   └── stop.bat                    # 停止服务
 │
 └── src/AntigravityQuota/
@@ -184,6 +189,29 @@ scripts\build.bat
 # 或
 dotnet build src/AntigravityQuota/AntigravityQuota.csproj -c Release -o bin
 ```
+
+---
+
+## 📤 发布流程
+
+`bin/` 已移出版本控制，所以 **zip 是唯一的分发渠道**，发布时别漏了上传附件。
+
+1. **打包**：双击 `scripts\package.bat` → 生成 `releases\antigravity-quota-widget-v<版本>.zip`
+
+2. **推送代码与标签**：
+   ```bash
+   git push origin main --tags
+   ```
+
+3. **在 GitHub 网页建 Release**：打开
+   `https://github.com/Rmistletoe/antigravity-quota-widget/releases/new`
+   - *Choose a tag* 选 `v<版本>`（本地已打好 tag）
+   - 标题 / 说明照抄本 README 的版本更新记录
+   - 把 `releases\antigravity-quota-widget-v<版本>.zip` 拖进附件区
+   - 点 **Publish release**
+
+> 发布包结构（与 v1.x 一致）：`bin/` + `scripts/` + `start.bat` + `README.md` + `LICENSE`。
+> 解压后双击 `start.bat` 即可运行，无需编译 —— 但用户机器需装 .NET 10 运行时。
 
 ---
 
