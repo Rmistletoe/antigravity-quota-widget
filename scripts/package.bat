@@ -1,7 +1,11 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0.."
-set VERSION=2.0.2
+
+rem 版本号自动从 csproj 读取（避免忘记同步）；读不到时回退到下面的默认值
+set VERSION=2.0.3
+for /f "tokens=3 delims=<>" %%v in ('findstr /r /c:"<Version>[0-9]" "src\AntigravityQuota\AntigravityQuota.csproj"') do set VERSION=%%v
+if not defined VERSION set VERSION=2.0.3
 
 echo ========================================================
 echo   Antigravity 用量面板 一键发布打包 (v%VERSION%)

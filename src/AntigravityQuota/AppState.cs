@@ -173,6 +173,11 @@ namespace AntigravityQuota
                 var summary = Usage;
                 var status = Status;
 
+                // 重置时刻的基准：把「剩余秒数」换算成绝对时间戳，
+                // 这样前端可以自己走秒倒计时，不必依赖后端每次推送。
+                var quotaBaselineUtc = LastQuotaFetchUtc == DateTime.MinValue
+                    ? DateTime.UtcNow : LastQuotaFetchUtc;
+
                 payload = new Dictionary<string, object?>
                 {
                     ["type"] = "update",
@@ -197,7 +202,11 @@ namespace AntigravityQuota
                                     ["label"] = b!.DisplayName,
                                     ["window"] = b!.Window,
                                     ["pct"] = b!.Percentage,
-                                    ["resetSeconds"] = b!.ResetSeconds
+                                    ["resetSeconds"] = b!.ResetSeconds,
+                                    // 绝对重置时刻（epoch 毫秒），前端据此自己走秒
+                                    ["resetAtMs"] = new DateTimeOffset(
+                                        quotaBaselineUtc.AddSeconds(Math.Max(0, b!.ResetSeconds)))
+                                        .ToUnixTimeMilliseconds()
                                 })
                                 .ToList()
                         })
