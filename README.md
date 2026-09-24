@@ -27,6 +27,8 @@
 - 🔒 **单例运行**：重复点击 `start.bat` 只会把浏览器重新指到已在运行的服务，不会起第二个进程。
 - 🚀 **随系统开机自启**：`AntigravityQuota.exe --autostart on`（静默采集，不弹浏览器）。
 - 🖥️ **桌面快捷方式**：`--install-shortcut` 一键在桌面生成带图标的快捷方式，之后双击即可打开面板，不用每次翻文件夹。
+- 🔔 **系统托盘图标**：常驻右下角，悬停显示实时配额（`Antigravity · 5h 22% · 周 93% · 今 42 次调用`），双击打开面板，右键可刷新 / 复制地址 / 开关自启 / 退出。关掉面板窗口不影响采集，托盘一点就回来。
+- 🪟 **面板以应用模式打开**：优先用 Edge / Chrome 的 `--app=` 打开一个**没有地址栏和标签栏**的独立窗口，看起来就像个原生程序；找不到 Chromium 系浏览器则退回普通标签页。
 
 ---
 
@@ -47,11 +49,11 @@
 | `scripts\stop.bat` | 停止服务 |
 | `scripts\package.bat` | 编译并打包出发布 zip 到 `releases\`（发布用） |
 
-> 程序是**无控制台窗口**类型（WinExe），启动后不会留任何黑框。
-> 想再打开一次面板，直接再双击 `start.bat` 即可。
+> 程序是**无控制台窗口**类型（WinExe），启动后不会留任何黑框，也不会弹窗打扰 ——
+> 它只在系统托盘放一个图标（悬停能看到实时配额，双击打开面板）。
 >
-> **运行环境要求**：Windows 10 / 11 + [.NET 10 运行时](https://dotnet.microsoft.com/download)（框架依赖构建，
-> 只用到基础运行时 `Microsoft.NETCore.App`，**不需要 Desktop Runtime**）。
+> **运行环境要求**：Windows 10 / 11 + [.NET 10 **Desktop** 运行时](https://dotnet.microsoft.com/download)。
+> 注：v2.0.5 起系统托盘用到 WinForms，因此需要 Desktop Runtime（v2.0.0~v2.0.4 只需基础运行时）。
 
 ### 4. 命令行参数
 
@@ -116,6 +118,7 @@ antigravity-quota-widget/
     ├── ConfigManager.cs            # 配置读写
     ├── AutoStartHelper.cs          # 开机自启（注册表）
     ├── ShortcutHelper.cs           # 桌面快捷方式创建/删除
+    ├── TrayIcon.cs                 # 系统托盘图标 + 面板打开方式
     ├── app.ico                     # 应用图标（编译进 exe）
     └── web/index.html              # 面板前端
 ```
@@ -161,6 +164,13 @@ antigravity-quota-widget/
 ---
 
 ## 🚀 版本更新记录
+
+### v2.0.5 (2026-09-24)
+- 🔔 **系统托盘图标**：开机静默启动后不再"找不到它"了。托盘常驻右下角，悬停显示实时配额，双击打开面板；右键菜单可刷新、复制面板地址、开关开机自启、打开数据目录、退出。
+  - 内部用 `Application.Run(ApplicationContext)` 起了消息泵 —— `NotifyIcon` 依赖 Windows 消息循环，主线程光阻塞在 `WaitOne` 上托盘点了不会有反应。
+  - 托盘文字每 5 秒刷新，并**强制截断到 62 字符**（`NotifyIcon.Text` 超过 63 会直接抛异常）。
+- 🪟 **面板改用应用模式打开**：优先 `msedge --app=` / `chrome --app=`，得到无地址栏无标签栏的独立窗口，更接近原生程序的手感；自动探测浏览器路径，都没有则退回普通标签页。
+- ⚠️ **运行时要求变化**：因为托盘用到 WinForms，依赖从基础运行时 `Microsoft.NETCore.App` 变为 **`Microsoft.WindowsDesktop.App`**，用户需装 .NET 10 **Desktop** 运行时。
 
 ### v2.0.4 (2026-09-24)
 - 🖥️ **桌面快捷方式**：新增 `--install-shortcut` / `--uninstall-shortcut`，一键在桌面生成带图标的快捷方式（自动识别 OneDrive / 自定义桌面路径），双击即开面板，不用再去文件夹里找。

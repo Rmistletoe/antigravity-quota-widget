@@ -14,6 +14,7 @@ namespace AntigravityQuota
         private const int BasePort = 8917;
         private const int PortAttempts = 12;
 
+        [STAThread]   // 托盘 NotifyIcon 需要 STA 线程
         private static int Main(string[] args)
         {
             try
@@ -43,9 +44,13 @@ namespace AntigravityQuota
 
                 if (!isFirstInstance)
                 {
-                    // 已经有一个服务在跑：直接把浏览器指过去，不再起第二个
+                    // 已经有一个服务在跑：把面板送到用户眼前，不再起第二个
                     var existing = RuntimeInfo.Read();
-                    if (existing != null) OpenBrowser(existing.Port);
+                    if (existing != null)
+                    {
+                        if (!PanelOpener.TryOpenAppMode($"http://127.0.0.1:{existing.Port}/"))
+                            PanelOpener.OpenInBrowser($"http://127.0.0.1:{existing.Port}/");
+                    }
                     else Log("已有实例在运行，但读不到端口信息");
                     return 0;
                 }
@@ -62,24 +67,23 @@ namespace AntigravityQuota
 
                 RuntimeInfo.Write(Environment.ProcessId, server.Port);
 
+                string url = $"http://127.0.0.1:{server.Port}/";
+
                 // --no-browser：静默采集不打扰（开机自启用它）
-                // --open：只打开浏览器
-                bool noBrowser = HasFlag(args, "--no-browser");
-                if (!noBrowser || HasFlag(args, "--open"))
-                    OpenBrowser(server.Port);
-
-                Log($"服务已启动: http://127.0.0.1:{server.Port}/  (pid={Environment.ProcessId})");
-
-                // 常驻，直到进程被结束
-                using var waitHandle = new ManualResetEvent(false);
-
-                AppDomain.CurrentDomain.ProcessExit += (s, e) =>
+                // --open：只把面板打开
+                if (!HasFlag(args, "--no-browser") || HasFlag(args, "--open"))
                 {
-                    RuntimeInfo.Clear();
-                    Log("服务已退出");
-                };
+                    if (!PanelOpener.TryOpenAppMode(url)) PanelOpener.OpenInBrowser(url);
+                }
 
-                waitHandle.WaitOne();
+                Log($"服务已启动: {url}  (pid={Environment.ProcessId})");
+                Log($"可用浏览器: {(PanelOpener.ExistingBrowsers().Count > 0
+                    ? string.Join(", ", PanelOpener.ExistingBrowsers()) : "未找到 Chromium 系浏览器")}");
+
+                AppDomain.CurrentDomain.ProcessExit += (s, e) => CleanupRuntime();
+
+                // 托盘图标 + 消息循环（会一直阻塞在这里，直到用户从托盘选「退出」）
+                System.Windows.Forms.Application.Run(new TrayApp(state, server.Port));
                 return 0;
             }
             catch (Exception ex)
@@ -89,23 +93,15 @@ namespace AntigravityQuota
             }
         }
 
+        /// <summary>退出前清掉 runtime.json，避免下次启动读到陈旧端口</summary>
+        internal static void CleanupRuntime()
+        {
+            RuntimeInfo.Clear();
+            Log("服务已退出");
+        }
+
         private static bool HasFlag(string[] args, string flag)
             => args.Any(a => a.Equals(flag, StringComparison.OrdinalIgnoreCase));
-
-        private static void OpenBrowser(int port)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo($"http://127.0.0.1:{port}/")
-                {
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                Log("打开浏览器失败: " + ex.Message);
-            }
-        }
 
         // ---------------- 日志 ----------------
 

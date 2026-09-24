@@ -161,6 +161,27 @@ namespace AntigravityQuota
             }
         }
 
+        /// <summary>
+        /// 托盘悬停提示。注意 NotifyIcon.Text 上限 63 字符，调用方需截断。
+        /// </summary>
+        public string BuildTrayTooltip()
+        {
+            lock (_lock)
+            {
+                if (Status?.Success != true) return "Antigravity 用量面板 · 未连接";
+
+                var gemini = Status.GeminiGroup;
+                var sb = new System.Text.StringBuilder("Antigravity");
+                if (gemini?.FiveHourBucket != null)
+                    sb.Append($" · 5h {gemini.FiveHourBucket.Percentage:F0}%");
+                if (gemini?.WeeklyBucket != null)
+                    sb.Append($" · 周 {gemini.WeeklyBucket.Percentage:F0}%");
+                if (Usage != null && Usage.Day.Totals.Calls > 0)
+                    sb.Append($" · 今 {Usage.Day.Totals.Calls} 次调用");
+                return sb.ToString();
+            }
+        }
+
         // ---------------- JSON 快照 ----------------
 
         private static readonly JsonSerializerOptions PayloadJsonOptions = new() { WriteIndented = false };

@@ -6,11 +6,13 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 只为系统托盘 NotifyIcon 引入 WinForms；不创建任何窗体，程序本身仍是无窗口的 -->
+    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>AntigravityQuota</RootNamespace>
     <AssemblyName>AntigravityQuota</AssemblyName>
-    <Version>2.0.4</Version>
-    <AssemblyVersion>2.0.4.0</AssemblyVersion>
-    <FileVersion>2.0.4.0</FileVersion>
+    <Version>2.0.5</Version>
+    <AssemblyVersion>2.0.5.0</AssemblyVersion>
+    <FileVersion>2.0.5.0</FileVersion>
     <Product>Antigravity Usage Panel</Product>
     <Description>Antigravity 配额与 Token 用量本地面板（无 GUI，浏览器查看）</Description>
     <!-- 桌面快捷方式与任务栏用的图标 -->
