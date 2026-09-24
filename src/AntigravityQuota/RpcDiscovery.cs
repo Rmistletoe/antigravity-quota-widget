@@ -77,31 +77,72 @@ namespace AntigravityQuota
 
         // ---------------- 进程与端口发现 ----------------
 
-        /// <summary>通过 WMI 定位 language_server.exe 并抠出 csrf_token</summary>
+        /// <summary>
+        /// 通过 WMI 定位 language_server.exe 并抠出 csrf_token。
+        /// 注意：Antigravity 升级/重启的那一刻，新旧两个 language_server 可能同时存在，
+        /// 此时**必须挑最新启动的那个** —— 否则会连到正在退出的旧进程上，
+        /// 表现为配额还偶尔能读、但会话列表一直"无法读取"。
+        /// </summary>
         public static bool TryFindProcess(out int pid, out string token)
         {
             pid = 0;
             token = "";
+
             try
             {
                 using var searcher = new ManagementObjectSearcher(
-                    "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name LIKE '%language_server.exe%'");
+                    "SELECT ProcessId, CommandLine, CreationDate FROM Win32_Process " +
+                    "WHERE Name LIKE '%language_server.exe%'");
                 using var results = searcher.Get();
+
+                DateTime bestCreated = DateTime.MinValue;
+                int bestPid = 0;
+                string bestToken = "";
 
                 foreach (ManagementObject obj in results)
                 {
-                    pid = Convert.ToInt32(obj["ProcessId"]);
                     string cmdline = obj["CommandLine"]?.ToString() ?? "";
                     var m = Regex.Match(cmdline, @"--csrf_token\s+([a-f0-9\-]+)", RegexOptions.IgnoreCase);
-                    if (m.Success)
-                    {
-                        token = m.Groups[1].Value;
-                        return true;
-                    }
+                    if (!m.Success) continue;
+
+                    int candidatePid = Convert.ToInt32(obj["ProcessId"]);
+                    DateTime created = ParseWmiTime(obj["CreationDate"]);
+
+                    // 启动时间更新的优先；时间不可用时（都相等）退化为 PID 更大者优先
+                    bool better = created > bestCreated
+                                  || (created == bestCreated && candidatePid > bestPid);
+                    if (!better) continue;
+
+                    bestCreated = created;
+                    bestPid = candidatePid;
+                    bestToken = m.Groups[1].Value;
+                }
+
+                if (bestPid > 0 && !string.IsNullOrEmpty(bestToken))
+                {
+                    pid = bestPid;
+                    token = bestToken;
+                    return true;
                 }
             }
             catch { }
             return false;
+        }
+
+        /// <summary>把 WMI 的 DMTF 时间串（如 20260924074538.123456+480）转成 DateTime</summary>
+        private static DateTime ParseWmiTime(object? value)
+        {
+            try
+            {
+                string raw = value?.ToString() ?? "";
+                return string.IsNullOrEmpty(raw)
+                    ? DateTime.MinValue
+                    : ManagementDateTimeConverter.ToDateTime(raw);
+            }
+            catch
+            {
+                return DateTime.MinValue;
+            }
         }
 
         [DllImport("iphlpapi.dll", SetLastError = true)]

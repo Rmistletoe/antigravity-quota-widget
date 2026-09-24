@@ -8,9 +8,11 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" />
 </p>
 
-本地监控 [Google Antigravity](https://antigravity.google/) 的**配额**与 **Token 用量**。没有 GUI 程序、没有悬浮球、没有托盘 —— 双击 `start.bat` 起一个纯本地服务，浏览器自动打开面板。
+本地监控 [Google Antigravity](https://antigravity.google/) 的**配额**与 **Token 用量**。没有 GUI 程序、没有悬浮球 —— 双击 `start.bat` 起一个纯本地服务，浏览器自动打开面板；平时在系统托盘常驻一个小图标。
 
 数据全部来自本机 Antigravity LanguageServer 的内部 RPC 接口，**不消耗任何云端 API 额度**。
+
+> 📋 各版本变更记录见 **[CHANGELOG.md](CHANGELOG.md)**。
 
 ---
 
@@ -91,6 +93,7 @@ antigravity-quota-widget/
 ├── AntigravityQuota.slnx           # Visual Studio 解决方案文件
 ├── LICENSE                         # MIT 开源许可证
 ├── README.md                       # 项目说明文档
+├── CHANGELOG.md                    # 更新日志（发版时同步）
 ├── .gitignore
 ├── start.bat                       # 一键启动（起服务 + 开浏览器）
 │
@@ -162,65 +165,6 @@ antigravity-quota-widget/
 
 ---
 
-## 🚀 版本更新记录
-
-### v2.0.5 (2026-09-24)
-- 🔔 **系统托盘图标**：开机静默启动后不再"找不到它"了。托盘常驻右下角，悬停显示实时配额，双击打开面板；右键菜单可刷新、复制面板地址、开关开机自启、打开数据目录、退出。
-  - 内部用 `Application.Run(ApplicationContext)` 起了消息泵 —— `NotifyIcon` 依赖 Windows 消息循环，主线程光阻塞在 `WaitOne` 上托盘点了不会有反应。
-  - 托盘文字每 5 秒刷新，并**强制截断到 62 字符**（`NotifyIcon.Text` 超过 63 会直接抛异常）。
-- 🌐 **面板一律在默认浏览器标签页打开**：托盘双击、桌面图标、启动时都走同一条路径，行为统一，没有"有时开窗口有时开标签"的困惑。
-- ⚠️ **运行时要求变化**：因为托盘用到 WinForms，依赖从基础运行时 `Microsoft.NETCore.App` 变为 **`Microsoft.WindowsDesktop.App`**，用户需装 .NET 10 **Desktop** 运行时。
-
-### v2.0.4 (2026-09-24)
-- 🖥️ **桌面快捷方式**：新增 `--install-shortcut` / `--uninstall-shortcut`，一键在桌面生成带图标的快捷方式（自动识别 OneDrive / 自定义桌面路径），双击即开面板，不用再去文件夹里找。
-- 🎨 **应用图标**：新增 `app.ico` 并编译进 exe —— 圆角蓝紫渐变 + 白色配额环，桌面和任务栏不再是一堆看不出区别的默认图标。
-- 🚀 开机自启与桌面快捷方式配合使用：开机静默采集，需要时双击图标看面板。
-
-### v2.0.3 (2026-09-23)
-- ⏳ **配额重置倒计时**：额度进度条每行新增「X小时XX分 后重置」实时倒计时，鼠标悬停可看绝对重置时刻。5 小时窗口精确到秒，周限额按「X天X小时」显示。
-  - 后端把 `resetSeconds` 换算成绝对时间戳 `resetAtMs` 下发，前端自己走秒 —— 因此即使某次配额拉取失败，倒计时依然准确。
-  - 配额真正重置时会自动触发一次数据刷新（每个桶只触发一次，不会每秒打服务）。
-- 🔧 `scripts/package.bat` 的版本号改为**自动从 csproj 读取**（读取失败回退到内置默认值），避免忘记同步导致 zip 文件名与版本不一致。
-
-### v2.0.2 (2026-09-22)
-- 🎛️ **布局调整**：额度进度条移到页面最上方（最先看到"会不会跑爆额度"）；日/周/月切换按钮移到「分模型占比」卡片标题栏 —— 它本来就是这个图（和下方明细表）的切换开关，放在同一行因果关系才明确；明细表标题右侧标注当前区间。
-- 🐛 **修复环形图图例显示原始 ID**：模型名映射表（`modelmap.json`）是改动前缓存的，24 小时内不会刷新，导致图例里出现 `gemini-3.8-flash-tiered` 这类裸 slug。为该缓存加了**格式版本号**，版本不符立即作废重建 —— 以后改动名称生成逻辑只要 +1 即可。
-- 🏷️ 图例名称截断长度放宽到 26 字符（`Gemini 3.8 Flash (High)` 现在能完整显示）。
-
-### v2.0.1 (2026-09-22)
-- 🐛 **修复图表刷新后消失**：每次渲染前都清空了图表容器，把 ECharts 自己插入的 canvas 删掉了，而实例还在复用 → 第二次自动刷新（10 秒后）图就空了。改为**只在首次创建实例时清空容器**，并在无数据/库未加载时正确 `dispose`。
-- 📈 **总 Token 口径调整**：缓存读取（缓存命中）现在计入总量，`总 Token = 输入 + 输出 + 缓存读取`；KPI 卡、趋势图、占比图、明细表占比条统一改用该口径。
-- 📊 趋势图新增「缓存读取」堆叠系列，一眼看出缓存占了多大比例（原图只画输入+输出）。
-
-### v2.0.0 (2026-09-22) —— 架构重写：去 GUI，改浏览器面板
-- 🖥️ **彻底移除 WPF / 悬浮球 / 系统托盘 / WebView2**，改为「**无窗口采集服务 + 本地 HTTP 服务 + 浏览器面板**」。双击 `start.bat` 直接看到网页。
-- 🧩 依赖大幅精简：不再需要 WPF/WinForms/WebView2 运行时；源码 16 个 `.cs` → **9 个 `.cs` + 1 个 `index.html`**，输出目录从十余个 DLL 降到 6 个文件。
-- 🪟 程序改为**无控制台窗口**（WinExe），启动不留黑框；因此启动脚本也不需要额外的 `.vbs` 隐藏窗口。
-- 🌐 新增 `HttpServer`（基于 `TcpListener`），**无需管理员权限、无需 URL 预留**；新增 `/api/export.csv` 导出接口。
-- 📉 面板升级为可缩放网页：趋势图支持滚轮/拖动缩放，明细表带占比条，新增状态栏（配额刷新时间 / 扫描时间 / 自动刷新倒计时 / 错误提示）。
-- 🧹 **脚本收敛为 3 个**（`start.bat` / `build.bat` / `stop.bat`）；清掉 `.vs/`、`releases/`、`scripts/poc/`、旧 Debug 输出与重复脚本。
-- 🐛 修复 `build.bat` 一直引用不存在的 `.sln` 文件（仓库里只有 `.slnx`），改为直接编译 csproj。
-
-### v1.3.0 (2026-09-22)
-- 🖥️ WebView2 用量面板（v2.0.0 已改为浏览器面板）
-- 🔧 修复分模型统计中的「未知模型」：系统步骤按 `executionId` 继承该轮模型
-- 🔧 修复 emoji 显示为方块（字体回退列表）
-- 🛡️ 账本清理加固：时间戳异常兜底、年份不合理不删
-
-### v1.2.0 (2026-09-22)
-- 📈 新增 Token 用量统计（日/周/月）、本地账本与 3 个月滚动保留、胶囊常驻今日用量、CSV 导出
-- 🧩 抽出 `RpcDiscovery`，配额与用量共用端点缓存
-
-### v1.1.0 (2026-09-03)
-- ⚡ 支持 Gemini 3.8 Flash；模型与状态详情板；动态模型识别与降序排列
-- 📐 上下屏幕智能自适应展开；屏幕位置自动记忆；随系统开机自启
-- 🔔 满血恢复与低配额预警；常驻核心模型自由切换；透明度调节
-
-### v1.0.0 (2026-09-02)
-- 🎉 首次开源发布：0 Token 本地 RPC 配额监控、真·置顶防最小化、系统托盘常驻。
-
----
-
 ## 🛠️ 本地构建
 
 环境要求：Windows 10 / 11，已安装 [.NET 10 SDK](https://dotnet.microsoft.com/)。
@@ -247,7 +191,7 @@ dotnet build src/AntigravityQuota/AntigravityQuota.csproj -c Release -o bin
 3. **在 GitHub 网页建 Release**：打开
    `https://github.com/Rmistletoe/antigravity-quota-widget/releases/new`
    - *Choose a tag* 选 `v<版本>`（本地已打好 tag）
-   - 标题 / 说明照抄本 README 的版本更新记录
+   - 标题 / 说明照抄 **[CHANGELOG.md](CHANGELOG.md)** 对应版本的段落
    - 把 `releases\antigravity-quota-widget-v<版本>.zip` 拖进附件区
    - 点 **Publish release**
 

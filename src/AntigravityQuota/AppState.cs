@@ -23,6 +23,9 @@ namespace AntigravityQuota
         private int _quotaBusy;
         private int _scanBusy;
 
+        /// <summary>连续扫描失败次数；用于过滤 Antigravity 重启期间的瞬时失败</summary>
+        private int _scanFailStreak;
+
         public AppConfig Config { get; private set; } = new();
         public QuotaStatus? Status { get; private set; }
         public UsageSummary? Usage { get; private set; }
@@ -113,8 +116,19 @@ namespace AntigravityQuota
                 lock (_lock)
                 {
                     LastScanUtc = DateTime.UtcNow;
-                    if (added < 0) LastError = _usageService.LastError;
-                    else if (!string.IsNullOrEmpty(_usageService.LastError)) LastError = _usageService.LastError;
+
+                    if (added < 0)
+                    {
+                        // 单次失败多半是 Antigravity 正在重启/升级导致的端点短暂失效，
+                        // 自愈逻辑下一轮就会重连成功 —— 这时弹红条只会吓人，连续失败才提示。
+                        _scanFailStreak++;
+                        LastError = _scanFailStreak >= 2 ? _usageService.LastError : "";
+                    }
+                    else
+                    {
+                        _scanFailStreak = 0;
+                        LastError = _usageService.LastError;
+                    }
                 }
 
                 RebuildSummary();
