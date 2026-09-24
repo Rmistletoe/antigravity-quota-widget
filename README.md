@@ -26,6 +26,7 @@
 - 🛡️ **零依赖、零权限**：内置极简 HTTP 服务基于 `TcpListener`，**不需要管理员权限、不需要 netsh urlacl 预留**。只监听 `127.0.0.1`。
 - 🔒 **单例运行**：重复点击 `start.bat` 只会把浏览器重新指到已在运行的服务，不会起第二个进程。
 - 🚀 **随系统开机自启**：`AntigravityQuota.exe --autostart on`（静默采集，不弹浏览器）。
+- 🖥️ **桌面快捷方式**：`--install-shortcut` 一键在桌面生成带图标的快捷方式，之后双击即可打开面板，不用每次翻文件夹。
 
 ---
 
@@ -55,12 +56,30 @@
 ### 4. 命令行参数
 
 ```bash
-AntigravityQuota.exe                 # 启动服务并打开浏览器
-AntigravityQuota.exe --no-browser    # 只启动服务，不打开浏览器（开机自启用它）
-AntigravityQuota.exe --open          # 只把浏览器指到已在运行的服务
-AntigravityQuota.exe --autostart on  # 开启开机自启
-AntigravityQuota.exe --autostart off # 关闭开机自启
+AntigravityQuota.exe                    # 启动服务并打开浏览器
+AntigravityQuota.exe --no-browser       # 只启动服务，不打开浏览器（开机自启用它）
+AntigravityQuota.exe --open             # 只把浏览器指到已在运行的服务
+AntigravityQuota.exe --install-shortcut    # 在桌面创建快捷方式
+AntigravityQuota.exe --uninstall-shortcut  # 删除桌面快捷方式
+AntigravityQuota.exe --autostart on     # 开启开机自启（静默采集，不弹浏览器）
+AntigravityQuota.exe --autostart off    # 关闭开机自启
 ```
+
+> 无控制台窗口，所以这些命令**执行后不会有任何回显**，结果写到
+> `%APPDATA%\AntigravityQuota\server.log`。
+
+### 5. 推荐配置：一次设置，之后零操作
+
+```bash
+# 1) 桌面放个图标，以后双击就能开面板（不需要跑去文件夹）
+bin\AntigravityQuota.exe --install-shortcut
+
+# 2) 开机静默自启，数据一直在采，打开电脑就有
+bin\AntigravityQuota.exe --autostart on
+```
+
+这样日常只剩一个动作：**双击桌面图标看面板**。
+（已在运行时再双击，不会起第二个进程，只会把浏览器指到现有服务。）
 
 ---
 
@@ -96,6 +115,8 @@ antigravity-quota-widget/
     ├── UsageAggregator.cs          # 日 / 周 / 月聚合
     ├── ConfigManager.cs            # 配置读写
     ├── AutoStartHelper.cs          # 开机自启（注册表）
+    ├── ShortcutHelper.cs           # 桌面快捷方式创建/删除
+    ├── app.ico                     # 应用图标（编译进 exe）
     └── web/index.html              # 面板前端
 ```
 
@@ -140,6 +161,11 @@ antigravity-quota-widget/
 ---
 
 ## 🚀 版本更新记录
+
+### v2.0.4 (2026-09-24)
+- 🖥️ **桌面快捷方式**：新增 `--install-shortcut` / `--uninstall-shortcut`，一键在桌面生成带图标的快捷方式（自动识别 OneDrive / 自定义桌面路径），双击即开面板，不用再去文件夹里找。
+- 🎨 **应用图标**：新增 `app.ico` 并编译进 exe —— 圆角蓝紫渐变 + 白色配额环，桌面和任务栏不再是一堆看不出区别的默认图标。
+- 🚀 开机自启与桌面快捷方式配合使用：开机静默采集，需要时双击图标看面板。
 
 ### v2.0.3 (2026-09-23)
 - ⏳ **配额重置倒计时**：额度进度条每行新增「X小时XX分 后重置」实时倒计时，鼠标悬停可看绝对重置时刻。5 小时窗口精确到秒，周限额按「X天X小时」显示。

@@ -27,6 +27,18 @@ namespace AntigravityQuota
                     return 0;
                 }
 
+                // 桌面快捷方式：AntigravityQuota.exe --install-shortcut | --uninstall-shortcut
+                if (HasFlag(args, "--install-shortcut"))
+                {
+                    Log("创建桌面快捷方式 → " + ShortcutHelper.Install());
+                    return 0;
+                }
+                if (HasFlag(args, "--uninstall-shortcut"))
+                {
+                    Log("删除桌面快捷方式 → " + ShortcutHelper.Uninstall());
+                    return 0;
+                }
+
                 using var mutex = new Mutex(true, MutexName, out bool isFirstInstance);
 
                 if (!isFirstInstance)
