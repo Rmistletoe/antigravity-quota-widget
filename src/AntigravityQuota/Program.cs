@@ -46,11 +46,7 @@ namespace AntigravityQuota
                 {
                     // 已经有一个服务在跑：把面板送到用户眼前，不再起第二个
                     var existing = RuntimeInfo.Read();
-                    if (existing != null)
-                    {
-                        if (!PanelOpener.TryOpenAppMode($"http://127.0.0.1:{existing.Port}/"))
-                            PanelOpener.OpenInBrowser($"http://127.0.0.1:{existing.Port}/");
-                    }
+                    if (existing != null) PanelOpener.OpenInBrowser($"http://127.0.0.1:{existing.Port}/");
                     else Log("已有实例在运行，但读不到端口信息");
                     return 0;
                 }
@@ -72,13 +68,9 @@ namespace AntigravityQuota
                 // --no-browser：静默采集不打扰（开机自启用它）
                 // --open：只把面板打开
                 if (!HasFlag(args, "--no-browser") || HasFlag(args, "--open"))
-                {
-                    if (!PanelOpener.TryOpenAppMode(url)) PanelOpener.OpenInBrowser(url);
-                }
+                    PanelOpener.OpenInBrowser(url);
 
                 Log($"服务已启动: {url}  (pid={Environment.ProcessId})");
-                Log($"可用浏览器: {(PanelOpener.ExistingBrowsers().Count > 0
-                    ? string.Join(", ", PanelOpener.ExistingBrowsers()) : "未找到 Chromium 系浏览器")}");
 
                 AppDomain.CurrentDomain.ProcessExit += (s, e) => CleanupRuntime();
 

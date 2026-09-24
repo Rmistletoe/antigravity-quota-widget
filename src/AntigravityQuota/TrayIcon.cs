@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -39,8 +38,7 @@ namespace AntigravityQuota
             };
 
             var menu = new ContextMenuStrip();
-            menu.Items.Add(NewItem("打开面板", () => OpenPanel(appMode: true), bold: true));
-            menu.Items.Add(NewItem("在浏览器标签中打开", () => OpenPanel(appMode: false)));
+            menu.Items.Add(NewItem("打开面板", OpenPanel, bold: true));
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(NewItem("立即刷新数据", () => _state.RequestRefresh()));
             menu.Items.Add(NewItem("复制面板地址", CopyUrl));
@@ -57,7 +55,7 @@ namespace AntigravityQuota
                 Visible = true,
                 ContextMenuStrip = menu
             };
-            _tray.DoubleClick += (s, e) => OpenPanel(appMode: true);
+            _tray.DoubleClick += (s, e) => OpenPanel();
 
             // 托盘悬停文字最多 63 字符，5 秒刷一次就够
             _timer = new System.Windows.Forms.Timer { Interval = 5000 };
@@ -82,13 +80,8 @@ namespace AntigravityQuota
 
         private string Url => $"http://127.0.0.1:{_port}/";
 
-        private void OpenPanel(bool appMode)
-        {
-            if (appMode && PanelOpener.TryOpenAppMode(Url))
-                return;
-
-            PanelOpener.OpenInBrowser(Url);
-        }
+        /// <summary>在默认浏览器的标签页里打开面板</summary>
+        private void OpenPanel() => PanelOpener.OpenInBrowser(Url);
 
         private void CopyUrl()
         {
@@ -163,31 +156,9 @@ namespace AntigravityQuota
         }
     }
 
-    /// <summary>负责把面板"送"到用户眼前。</summary>
+    /// <summary>负责把面板送到用户眼前的默认浏览器里。</summary>
     internal static class PanelOpener
     {
-        /// <summary>
-        /// 用 Chromium 系浏览器的 --app 模式开一个无地址栏/无标签栏的独立窗口，
-        /// 看起来更像个原生程序。找不到浏览器则返回 false，由调用方退回普通打开。
-        /// </summary>
-        public static bool TryOpenAppMode(string url)
-        {
-            foreach (string exe in FindChromiumBrowsers())
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo(exe, $"--app=\"{url}\"")
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    });
-                    return true;
-                }
-                catch { }
-            }
-            return false;
-        }
-
         public static void OpenInBrowser(string url)
         {
             try
@@ -198,28 +169,6 @@ namespace AntigravityQuota
             {
                 Program.Log("打开浏览器失败: " + ex.Message);
             }
-        }
-
-        private static IEnumerable<string> FindChromiumBrowsers()
-        {
-            string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string pf86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-
-            yield return Path.Combine(pf86, @"Microsoft\Edge\Application\msedge.exe");
-            yield return Path.Combine(pf, @"Microsoft\Edge\Application\msedge.exe");
-            yield return Path.Combine(pf, @"Google\Chrome\Application\chrome.exe");
-            yield return Path.Combine(pf86, @"Google\Chrome\Application\chrome.exe");
-            yield return Path.Combine(local, @"Google\Chrome\Application\chrome.exe");
-        }
-
-        /// <summary>过滤出真实存在的浏览器路径</summary>
-        public static List<string> ExistingBrowsers()
-        {
-            var list = new List<string>();
-            foreach (string p in FindChromiumBrowsers())
-                if (File.Exists(p)) list.Add(p);
-            return list;
         }
     }
 }
