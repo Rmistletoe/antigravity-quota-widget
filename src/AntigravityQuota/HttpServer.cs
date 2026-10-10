@@ -135,6 +135,26 @@ namespace AntigravityQuota
                             return;
 
                         default:
+                            string webRootFull = Path.GetFullPath(_webRoot);
+                            string staticFile = Path.GetFullPath(Path.Combine(_webRoot, path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
+                            if (File.Exists(staticFile) && staticFile.StartsWith(webRootFull, StringComparison.OrdinalIgnoreCase))
+                            {
+                                string ext = Path.GetExtension(staticFile).ToLowerInvariant();
+                                string mime = ext switch
+                                {
+                                    ".js" => "application/javascript; charset=utf-8",
+                                    ".css" => "text/css; charset=utf-8",
+                                    ".png" => "image/png",
+                                    ".ico" => "image/x-icon",
+                                    ".svg" => "image/svg+xml",
+                                    ".html" => "text/html; charset=utf-8",
+                                    ".json" => "application/json; charset=utf-8",
+                                    _ => "application/octet-stream"
+                                };
+                                byte[] bytes = await File.ReadAllBytesAsync(staticFile).ConfigureAwait(false);
+                                await WriteBytesAsync(stream, 200, mime, bytes).ConfigureAwait(false);
+                                return;
+                            }
                             await WriteAsync(stream, 404, "text/plain; charset=utf-8", "404 Not Found")
                                 .ConfigureAwait(false);
                             return;
@@ -145,6 +165,22 @@ namespace AntigravityQuota
             {
                 // 客户端断开等情况直接忽略
             }
+        }
+
+        private static async Task WriteBytesAsync(
+            NetworkStream stream, int code, string contentType, byte[] payload)
+        {
+            var head = new StringBuilder(256);
+            head.Append("HTTP/1.1 ").Append(code).Append(' ').Append(ReasonPhrase(code)).Append("\r\n");
+            head.Append("Content-Type: ").Append(contentType).Append("\r\n");
+            head.Append("Content-Length: ").Append(payload.Length).Append("\r\n");
+            head.Append("Cache-Control: public, max-age=86400\r\n");
+            head.Append("Connection: close\r\n\r\n");
+
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(head.ToString())).ConfigureAwait(false);
+            if (payload.Length > 0)
+                await stream.WriteAsync(payload).ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
         }
 
         private static async Task WriteAsync(

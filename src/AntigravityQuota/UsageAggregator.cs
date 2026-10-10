@@ -78,6 +78,111 @@ namespace AntigravityQuota
         public List<ModelUsageItem> TopModels { get; set; } = new();
     }
 
+    public class ConversationContextItem
+    {
+        public string CascadeId { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Model { get; set; } = "";
+        public string ModelLabel { get; set; } = "";
+        public DateTime LastActive { get; set; }
+        public int StepIndex { get; set; }
+        public int TotalSteps { get; set; }
+        public long CurrentContextTokens { get; set; }
+        public long LatestInputTokens { get; set; }
+        public long LatestCacheTokens { get; set; }
+        public long LatestOutputTokens { get; set; }
+        public long LatestThinkingTokens { get; set; }
+        public long TotalSessionTokens { get; set; }
+        public long ContextWindowLimit { get; set; }
+        public double ContextPercentage { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    public static class ConversationTitleHelper
+    {
+        private static readonly Dictionary<string, string> _cache = new(StringComparer.Ordinal);
+        private static readonly object _lock = new();
+
+        public static string GetTitle(string cascadeId)
+        {
+            if (string.IsNullOrEmpty(cascadeId)) return "未命名会话";
+            lock (_lock)
+            {
+                if (_cache.TryGetValue(cascadeId, out var cached)) return cached;
+            }
+
+            string title = "";
+            try
+            {
+                string brainDir = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".gemini", "antigravity", "brain", cascadeId);
+                string transcriptFile = System.IO.Path.Combine(brainDir, ".system_generated", "logs", "transcript.jsonl");
+                if (System.IO.File.Exists(transcriptFile))
+                {
+                    using var fs = new System.IO.FileStream(transcriptFile, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
+                    using var reader = new System.IO.StreamReader(fs, System.Text.Encoding.UTF8);
+                    string? line;
+                    int count = 0;
+                    while ((line = reader.ReadLine()) != null && count++ < 15)
+                    {
+                        if (line.Contains("\"type\":\"USER_INPUT\""))
+                        {
+                            try
+                            {
+                                using var doc = System.Text.Json.JsonDocument.Parse(line);
+                                if (doc.RootElement.TryGetProperty("content", out var contentProp))
+                                {
+                                    string content = contentProp.GetString() ?? "";
+                                    var m = System.Text.RegularExpressions.Regex.Match(
+                                        content, @"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>",
+                                        System.Text.RegularExpressions.RegexOptions.Singleline);
+                                    if (m.Success && !string.IsNullOrWhiteSpace(m.Groups[1].Value))
+                                    {
+                                        title = m.Groups[1].Value.Trim();
+                                        int nl = title.IndexOfAny(new[] { '\r', '\n' });
+                                        if (nl > 0) title = title.Substring(0, nl).Trim();
+                                        if (title.Length > 50) title = title.Substring(0, 50) + "...";
+                                        break;
+                                    }
+                                    string plain = content.Trim();
+                                    int nlPlain = plain.IndexOfAny(new[] { '\r', '\n' });
+                                    if (nlPlain > 0) plain = plain.Substring(0, nlPlain).Trim();
+                                    if (!plain.StartsWith("<") && !string.IsNullOrWhiteSpace(plain))
+                                    {
+                                        title = plain.Length > 50 ? plain.Substring(0, 50) + "..." : plain;
+                                        break;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = cascadeId.Length > 8 ? ("会话 " + cascadeId.Substring(0, 8)) : cascadeId;
+            }
+
+            lock (_lock)
+            {
+                _cache[cascadeId] = title;
+            }
+            return title;
+        }
+
+        public static long GetContextLimit(string modelLabel)
+        {
+            string s = modelLabel.ToLowerInvariant();
+            if (s.Contains("claude") || s.Contains("sonnet") || s.Contains("opus")) return 200_000;
+            if (s.Contains("gpt-4") || s.Contains("gpt-oss")) return 128_000;
+            return 2_000_000;
+        }
+    }
+
     public class UsageSummary
     {
         public UsageRangeStats Day { get; } = new();
@@ -91,6 +196,12 @@ namespace AntigravityQuota
 
         /// <summary>按日期升序的全量每日汇总（供趋势图/热力图）</summary>
         public List<DailyUsage> Daily { get; } = new();
+
+        /// <summary>按最后活跃时间排序的会话列表及其实时上下文</summary>
+        public List<ConversationContextItem> Conversations { get; set; } = new();
+
+        /// <summary>当前正在交互的最活跃会话</summary>
+        public ConversationContextItem? ActiveConversation { get; set; }
 
         public UsageRangeStats For(UsageRange range) => range switch
         {
@@ -174,6 +285,50 @@ namespace AntigravityQuota
                 daily.Totals.Add(kv.Value);
                 summary.Daily.Add(daily);
             }
+
+            // 汇总各会话及其最新上下文
+            var byCascade = records.Where(r => !string.IsNullOrEmpty(r.CascadeId)).GroupBy(r => r.CascadeId);
+            var convList = new List<ConversationContextItem>();
+
+            foreach (var g in byCascade)
+            {
+                var latest = g.OrderByDescending(r => r.StepIndex).ThenByDescending(r => r.LocalTime).FirstOrDefault();
+                if (latest == null) continue;
+
+                string rawModel = latest.Model;
+                string label = modelLabeler(rawModel);
+                long limit = ConversationTitleHelper.GetContextLimit(label);
+                long currentCtx = latest.Input + latest.Cache;
+                double pct = limit > 0 ? (double)currentCtx / limit * 100.0 : 0.0;
+                long totalSession = g.Sum(r => r.Total);
+
+                convList.Add(new ConversationContextItem
+                {
+                    CascadeId = g.Key,
+                    Title = ConversationTitleHelper.GetTitle(g.Key),
+                    Model = rawModel,
+                    ModelLabel = label,
+                    LastActive = latest.LocalTime,
+                    StepIndex = latest.StepIndex,
+                    TotalSteps = g.Count(),
+                    CurrentContextTokens = currentCtx,
+                    LatestInputTokens = latest.Input,
+                    LatestCacheTokens = latest.Cache,
+                    LatestOutputTokens = latest.Output,
+                    LatestThinkingTokens = latest.Thinking,
+                    TotalSessionTokens = totalSession,
+                    ContextWindowLimit = limit,
+                    ContextPercentage = Math.Min(100.0, Math.Round(pct, 2))
+                });
+            }
+
+            convList = convList.OrderByDescending(c => c.LastActive).ToList();
+            if (convList.Count > 0)
+            {
+                convList[0].IsActive = true;
+                summary.ActiveConversation = convList[0];
+            }
+            summary.Conversations = convList.Take(25).ToList();
 
             return summary;
         }

@@ -96,6 +96,26 @@
   .empty{padding:26px 6px;text-align:center;color:var(--txt3);font-size:12.5px}
   footer{margin-top:16px;color:var(--txt3);font-size:11.5px;text-align:center;line-height:1.9}
   code{background:#E2E8F0;border-radius:4px;padding:1px 5px;font-size:11.5px}
+
+  /* 会话实时上下文样式 */
+  .active-conv{background:#F8FAFC;border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .ac-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .ac-title-wrap{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 320px}
+  .badge-active{background:#DCFCE7;color:#166534;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;flex:none}
+  .ac-title{font-size:13.5px;font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ac-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .ac-metric-box{margin-bottom:12px}
+  .ac-metric-val{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+  .big-ctx{font-size:24px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+  .ctx-limit{font-size:12px;color:var(--txt3)}
+  .ctx-pct-badge{font-size:12px;font-weight:600;padding:2px 7px;border-radius:6px;background:#E0F2FE;color:var(--blue)}
+  .ctx-bar-track{height:8px;border-radius:4px;background:#E2E8F0;overflow:hidden}
+  .ctx-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg, #378ADD 0%, #7C3AED 100%);transition:width .4s ease}
+  .ac-breakdown{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding-top:10px;border-top:1px dashed var(--border)}
+  @media(max-width:860px){.ac-breakdown{grid-template-columns:repeat(2,1fr)}}
+  .bd-item{display:flex;flex-direction:column;gap:2px}
+  .bd-k{font-size:11.5px;color:var(--txt2)}
+  .bd-v{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--txt)}
 </style>
 </head>
 <body>
@@ -124,6 +144,35 @@
   <div class="statusbar" id="errBox"><b>⚠</b><span id="errText"></span></div>
 
   <div class="grid quota" id="quota"></div>
+
+  <!-- 会话实时上下文卡片 -->
+  <div class="card" id="convCard" style="display:none;margin-top:14px;">
+    <div class="cardhead">
+      <h2><span>💬 对话实时上下文监控 (Context Window)</span><span class="sub" id="ctxSub">当前交互会话实时用量</span></h2>
+      <div class="tabs">
+        <button id="btnToggleAllConv" style="font-size:11.5px;padding:3px 10px;cursor:pointer;">展开更多历史会话 ▾</button>
+      </div>
+    </div>
+    <div id="activeConvBox"></div>
+    <div id="allConvBox" style="display:none;margin-top:14px;border-top:1px solid var(--border-soft);padding-top:12px;overflow-x:auto;">
+      <table style="width:100%;font-size:12px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">会话标题 / 标识</th>
+            <th style="text-align:left;">模型</th>
+            <th style="text-align:right;">当前上下文</th>
+            <th style="text-align:right;">缓存命中</th>
+            <th style="text-align:right;">交互轮次</th>
+            <th style="text-align:right;">累计Token</th>
+            <th style="text-align:right;">最后活跃</th>
+          </tr>
+        </thead>
+        <tbody id="allConvBody">
+          <tr><td colspan="7" class="empty">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="grid kpi" id="kpi"></div>
 
@@ -161,7 +210,22 @@
   </footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="/echarts.min.js"></script>
+<script>
+  if (!window.echarts) {
+    document.write('<script src="https://registry.npmmirror.com/echarts/5.5.1/files/dist/echarts.min.js"><\/script>');
+  }
+</script>
+<script>
+  if (!window.echarts) {
+    document.write('<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.5.1/echarts.min.js"><\/script>');
+  }
+</script>
+<script>
+  if (!window.echarts) {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"><\/script>');
+  }
+</script>
 <script>
 (function () {
   "use strict";
@@ -181,6 +245,10 @@
     return String(v);
   }
   function num(v) { return (Number(v) || 0).toLocaleString("en-US"); }
+  function esc(s) {
+    if (!s) return "";
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
 
   // 剩余时长：超一天按「X天X小时」，超一小时按「X小时XX分」，否则「MM:SS」
   function fmtDur(ms) {
@@ -388,6 +456,96 @@
     if (needReload) load();
   }
 
+  function renderConversations(convs) {
+    var card = el("convCard");
+    if (!card) return;
+    if (!convs || !convs.length) {
+      card.style.display = "none";
+      return;
+    }
+    card.style.display = "block";
+
+    var active = convs.find(function (c) { return c.isActive; }) || convs[0];
+    var actBox = el("activeConvBox");
+    if (active && actBox) {
+      var ctxFmt = fmt(active.contextTokens);
+      var limFmt = fmt(active.limit);
+      var cachePct = active.contextTokens > 0 ? (active.cacheTokens / active.contextTokens * 100).toFixed(1) : 0;
+      var inPct = active.contextTokens > 0 ? (active.inputTokens / active.contextTokens * 100).toFixed(1) : 0;
+      var barPct = Math.min(100, Math.max(active.pct, 0.5));
+      var barColor = active.pct >= 80 ? "linear-gradient(90deg, #F59E0B 0%, #EF4444 100%)" : "linear-gradient(90deg, #378ADD 0%, #7C3AED 100%)";
+
+      actBox.innerHTML =
+        '<div class="active-conv">'
+        + '<div class="ac-header">'
+        + '  <div class="ac-title-wrap">'
+        + '    <span class="badge-active">🌟 当前活跃会话</span>'
+        + '    <span class="ac-title" title="' + esc(active.title) + ' (ID: ' + esc(active.id) + ')">' + esc(active.title) + '</span>'
+        + '  </div>'
+        + '  <div class="ac-meta">'
+        + '    <span class="pill">⚡ ' + esc(active.model || "未知模型") + '</span>'
+        + '    <span class="pill">第 ' + active.step + ' 步 (共 ' + active.totalSteps + ' 次交互)</span>'
+        + '    <span class="pill" title="' + esc(active.lastActive) + '">' + esc(active.lastActive ? active.lastActive.slice(11) : "—") + '</span>'
+        + '  </div>'
+        + '</div>'
+        + '<div class="ac-body">'
+        + '  <div class="ac-metric-box">'
+        + '    <div class="ac-metric-val">'
+        + '      <span class="big-ctx">' + ctxFmt + '</span>'
+        + '      <span class="ctx-limit">/ ' + limFmt + ' tokens</span>'
+        + '      <span class="ctx-pct-badge">' + active.pct + '%</span>'
+        + '    </div>'
+        + '    <div class="ctx-bar-track">'
+        + '      <div class="ctx-bar-fill" style="width:' + barPct + '%;background:' + barColor + ';"></div>'
+        + '    </div>'
+        + '  </div>'
+        + '  <div class="ac-breakdown">'
+        + '    <div class="bd-item">'
+        + '      <span class="bd-k">⚡ 上下文缓存命中 (Cache)</span>'
+        + '      <span class="bd-v">' + fmt(active.cacheTokens) + ' <small style="font-weight:400;color:var(--txt3);">(' + cachePct + '%)</small></span>'
+        + '    </div>'
+        + '    <div class="bd-item">'
+        + '      <span class="bd-k">📥 本轮新增输入 (Input)</span>'
+        + '      <span class="bd-v">' + fmt(active.inputTokens) + ' <small style="font-weight:400;color:var(--txt3);">(' + inPct + '%)</small></span>'
+        + '    </div>'
+        + '    <div class="bd-item">'
+        + '      <span class="bd-k">📤 本轮生成输出 (Output)</span>'
+        + '      <span class="bd-v">' + fmt(active.outputTokens) + ' tokens</span>'
+        + '    </div>'
+        + '    <div class="bd-item">'
+        + '      <span class="bd-k">📦 会话累计消耗总量</span>'
+        + '      <span class="bd-v">' + fmt(active.totalTokens) + ' tokens</span>'
+        + '    </div>'
+        + '  </div>'
+        + '</div>'
+        + '</div>';
+    }
+
+    var tbody = el("allConvBody");
+    if (tbody) {
+      if (convs.length <= 1) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无其他历史会话</td></tr>';
+      } else {
+        tbody.innerHTML = convs.map(function (c) {
+          var isCur = c.id === (active && active.id);
+          var cFmt = fmt(c.contextTokens);
+          var lFmt = fmt(c.limit);
+          var tag = isCur ? '<span class="badge-active" style="font-size:10px;padding:1px 6px;margin-right:6px;">当前</span>' : '';
+          return '<tr' + (isCur ? ' style="background:#F0FDF4;"' : '') + '>'
+            + '<td style="text-align:left;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(c.title) + '&#10;ID: ' + esc(c.id) + '">'
+            + tag + esc(c.title) + '</td>'
+            + '<td style="text-align:left;white-space:nowrap;">' + esc(c.model || "—") + '</td>'
+            + '<td style="text-align:right;"><b>' + cFmt + '</b> <small style="color:var(--txt3);">/ ' + lFmt + ' (' + c.pct + '%)</small></td>'
+            + '<td style="text-align:right;">' + fmt(c.cacheTokens) + '</td>'
+            + '<td style="text-align:right;">' + c.totalSteps + ' 轮</td>'
+            + '<td style="text-align:right;">' + fmt(c.totalTokens) + '</td>'
+            + '<td style="text-align:right;white-space:nowrap;color:var(--txt3);">' + (c.lastActive ? c.lastActive.slice(5, 16) : "—") + '</td>'
+            + '</tr>';
+        }).join("");
+      }
+    }
+  }
+
   function renderAll() {
     var d = state.data;
     if (!d) return;
@@ -418,6 +576,7 @@
     renderDonut();
     renderTable();
     renderQuota(d.groups);
+    renderConversations((d.usage && d.usage.conversations) || []);
 
     el("foot").innerHTML = "最后更新 " + d.ts
       + " · 账本保留最近 " + d.retentionMonths + " 个月 · 页面每 " + REFRESH_SEC + " 秒自动刷新";
@@ -463,6 +622,17 @@
       }, 1200);
     });
   });
+
+  var showAllConv = false;
+  var toggleBtn = el("btnToggleAllConv");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", function () {
+      showAllConv = !showAllConv;
+      var box = el("allConvBox");
+      if (box) box.style.display = showAllConv ? "block" : "none";
+      toggleBtn.textContent = showAllConv ? "收起历史会话 ▴" : "展开更多历史会话 ▾";
+    });
+  }
 
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) load();

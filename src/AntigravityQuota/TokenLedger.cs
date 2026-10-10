@@ -68,6 +68,9 @@ namespace AntigravityQuota
 
         /// <summary>有效工作量口径：输入 + 输出（输出已含思考，不重复相加）</summary>
         [JsonIgnore] public long Work => Input + Output;
+
+        /// <summary>总 Token 口径：输入 + 输出 + 缓存读取</summary>
+        [JsonIgnore] public long Total => Input + Output + Cache;
     }
 
     /// <summary>

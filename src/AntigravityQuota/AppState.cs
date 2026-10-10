@@ -276,7 +276,25 @@ namespace AntigravityQuota
                 ["day"] = ModelsToPayload(s.Day.TopModels),
                 ["week"] = ModelsToPayload(s.Week.TopModels),
                 ["month"] = ModelsToPayload(s.Month.TopModels)
-            }
+            },
+            ["conversations"] = s.Conversations.Select(c => new Dictionary<string, object?>
+            {
+                ["id"] = c.CascadeId,
+                ["title"] = c.Title,
+                ["model"] = c.ModelLabel,
+                ["lastActive"] = c.LastActive.ToString("yyyy-MM-dd HH:mm:ss"),
+                ["step"] = c.StepIndex,
+                ["totalSteps"] = c.TotalSteps,
+                ["contextTokens"] = c.CurrentContextTokens,
+                ["inputTokens"] = c.LatestInputTokens,
+                ["cacheTokens"] = c.LatestCacheTokens,
+                ["outputTokens"] = c.LatestOutputTokens,
+                ["thinkingTokens"] = c.LatestThinkingTokens,
+                ["totalTokens"] = c.TotalSessionTokens,
+                ["limit"] = c.ContextWindowLimit,
+                ["pct"] = c.ContextPercentage,
+                ["isActive"] = c.IsActive
+            }).ToList()
         };
 
         private static Dictionary<string, object?> TotalsToPayload(UsageTotals t) => new()
